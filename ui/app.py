@@ -19,6 +19,8 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from pipeline.cards import node_card as pipeline_node_card  # noqa: E402
+
 NODES_PATH = ROOT / "outputs" / "nodes_roles.csv"
 TOP_PATH = ROOT / "outputs" / "top_nodes.csv"
 CLUSTERS_PATH = ROOT / "outputs" / "clusters.csv"
@@ -105,13 +107,24 @@ def graph_html(nodes: pd.DataFrame, edges: pd.DataFrame, selected: str | None) -
     )
 
 
-def node_card(gid: str, nodes: pd.DataFrame, edges: pd.DataFrame) -> None:
+def render_node_card(gid: str, nodes: pd.DataFrame, edges: pd.DataFrame) -> None:
     match = nodes[nodes["gid"] == gid]
     if match.empty:
         st.warning(f"GID {gid} не найден в выгрузке.")
         return
     row = match.iloc[0]
-    st.subheader(f"Карточка узла {gid}")
+    st.markdown(pipeline_node_card(gid))
+    badges = []
+    if float(row.get("n_cycles", 0) or 0) > 0:
+        badges.append(f"🔄 Циклы: {int(row.get('n_cycles', 0))}")
+    if float(row.get("n_fast_chains", 0) or 0) > 0:
+        badges.append(f"⚡ Быстрые цепочки: {int(row.get('n_fast_chains', 0))}")
+    if bool_value(row.get("split_flag", False)):
+        badges.append("🧩 Дробление")
+    if float(row.get("anomaly_z", 0) or 0) >= 3:
+        badges.append(f"📈 Аномалия: {float(row.get('anomaly_z', 0)):.1f}σ")
+    if badges:
+        st.markdown(" &nbsp; ".join(f"`{badge}`" for badge in badges), unsafe_allow_html=True)
     if bool_value(row.get("truncated", False)):
         st.error("Обрыв выгрузки на 4-м колене: исходящие не выгружены. Нужен дополнительный запрос данных.")
     st.markdown(f"**{ROLE_LABELS.get(str(row.role), row.role)}** (`{row.role}`) · правило `{row.get('rule', '—')}` · кластер `{row.get('cluster_id', '—')}`")
@@ -143,6 +156,11 @@ def render_network(nodes: pd.DataFrame, edges: pd.DataFrame, gid: str | None, ro
     else:
         ids = set(nodes.nlargest(50, "priority_score")["gid"])
     shown = nodes[nodes["gid"].isin(ids) & nodes["role"].isin(roles)]
+    if len(shown) > 300:
+        limited = shown.nlargest(300, "priority_score")
+        if gid and gid in set(shown["gid"]) and gid not in set(limited["gid"]):
+            limited = pd.concat([limited.iloc[:-1], shown[shown["gid"] == gid]])
+        shown = limited
     if shown.empty:
         st.warning("После фильтрации не осталось узлов.")
         return
@@ -210,7 +228,7 @@ with tab_network:
     else:
         render_network(nodes, edges, selected, roles, None if cluster_choice == "Все" else int(cluster_choice), depth)
         if selected:
-            node_card(selected, nodes, edges)
+            render_node_card(selected, nodes, edges)
 
 with tab_top:
     st.subheader("Узлы с наивысшим приоритетом проверки")
@@ -220,7 +238,7 @@ with tab_top:
         key="top_gid", on_change=select_top_gid,
     )
     if chosen_top:
-        node_card(chosen_top, nodes, edges)
+        render_node_card(chosen_top, nodes, edges)
 
 with tab_clusters:
     st.subheader("Кластеры и рабочие гипотезы")
