@@ -1,10 +1,7 @@
 """Русский интерфейс AML-графа: ``streamlit run ui/app.py``."""
 from __future__ import annotations
 
-import json
-import os
 import sys
-import uuid
 from pathlib import Path
 
 import pandas as pd
@@ -18,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 st.set_page_config(page_title="Граф денег", page_icon="🔎", layout="wide")
 
-from ui.aml import card, data, explain, graph, theme  # noqa: E402
+from ui.aml import assistant, card, data, explain, graph, theme  # noqa: E402
 
 TAB_HOME = "🏠 Кого проверять первым"
 TAB_NETWORK = "🕸️ Сеть"
@@ -242,38 +239,7 @@ with tab_clusters:
                 c_btn.button("Открыть", key=f"cl_open_{cgid}", on_click=open_node, args=(cgid,), width="stretch")
 
 with tab_ai:
-    st.subheader("AI-ассистент по графу")
-    if not (os.getenv("OPENAI_API_KEY") or os.getenv("NVIDIA_API_KEY")):
-        st.info("AI-ассистент выключен: добавьте OPENAI_API_KEY или NVIDIA_API_KEY в .env. Остальные вкладки работают без ключа.")
-    else:
-        from harness.agent import Agent
-        if "graph_agent" not in st.session_state:
-            st.session_state.graph_agent = Agent(session_id=uuid.uuid4().hex[:12], on_event=None)
-            st.session_state.graph_chat = []
-        for message in st.session_state.graph_chat:
-            with st.chat_message(message["role"]):
-                if message.get("steps"):
-                    with st.expander("Шаги агента"):
-                        for step in message["steps"]:
-                            st.code(json.dumps(step, ensure_ascii=False, indent=2)[:4000])
-                st.markdown(message["content"])
-        question = st.chat_input("Например: кто главный консолидатор?")
-        if question:
-            st.session_state.graph_chat.append({"role": "user", "content": question})
-            steps = []
-            def on_event(event):
-                if event.type in {"thinking", "tool_call", "tool_result", "error"}:
-                    steps.append({"type": event.type, **event.data})
-            agent = st.session_state.graph_agent
-            agent.on_event = on_event
-            safety = ("Отвечай только по данным инструментов графа. Каждый вывод называй гипотезой для проверки, "
-                      "указывай gid и никогда не утверждай виновность. Вопрос аналитика: ")
-            try:
-                answer = agent.run(safety + question)
-            except Exception as exc:
-                answer = f"Не удалось получить ответ ассистента: {exc}"
-            st.session_state.graph_chat.append({"role": "assistant", "content": answer, "steps": steps})
-            st.rerun()
+    assistant.render(nodes, top, open_node)
 
 with tab_howto:
     explain.render_how_it_works(nodes)
