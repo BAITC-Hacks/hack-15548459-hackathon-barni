@@ -97,7 +97,12 @@ def graph_html(nodes: pd.DataFrame, edges: pd.DataFrame, selected: str | None) -
         amount = float(row.sum_kzt)
         net.add_edge(str(row.src), str(row.dst), value=1 + 8 * (amount / max_sum) ** 0.5,
                      title=f"{money(amount)} · переводов: {int(row.n_tx)}")
-    return net.generate_html(notebook=False)
+    page = net.generate_html(notebook=False)
+    return page.replace(
+        "</head>",
+        "<style>html,body,#mynetwork{margin:0!important;padding:0!important;"
+        "background:#0b1120!important;border:0!important;}</style></head>",
+    )
 
 
 def node_card(gid: str, nodes: pd.DataFrame, edges: pd.DataFrame) -> None:
@@ -150,6 +155,14 @@ except Exception as exc:
     st.error(f"Не удалось загрузить данные графа: {exc}")
     st.stop()
 
+st.markdown(
+    "<style>"
+    ".block-container{padding-top:2.5rem!important;}"
+    "div[data-testid='stIFrame'],div[data-testid='stIFrame'] iframe{"
+    "background:#0b1120!important;border:0!important;}"
+    "</style>",
+    unsafe_allow_html=True,
+)
 st.title("🔎 Граф денег")
 st.caption("Роли и связи — аналитические признаки для проверки, а не утверждение о виновности.")
 
