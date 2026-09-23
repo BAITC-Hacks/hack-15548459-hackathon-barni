@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from pipeline import clusters, metrics, patterns, report, roles
+from pipeline import cards, clusters, metrics, patterns, report, roles
 from pipeline.config import THRESHOLDS as T
 
 REQUIRED = ["gid", "role", "role_score", "cluster_id", "priority_score", "evidence"]
@@ -49,6 +49,9 @@ def main():
     top.insert(0, "rank", range(1, len(top) + 1))
     top["why"] = [roles.why(r) for r in top.itertuples()]
     top[["rank", "gid", "role", "priority_score", "why", "cluster_id"]].to_csv(out / "top_nodes.csv", index=False)
+
+    cards.init(df, G)
+    cards.write_cards(out / "node_cards.md", df, n=20)
 
     df.to_parquet(out / "metrics.parquet", index=False)  # для интерфейса и ассистента
 
