@@ -48,19 +48,26 @@ def reset_selection() -> None:
     st.session_state.top_gid = ""
 
 
+def go_network() -> None:
+    """Ввели gid в поиске → сразу показать вкладку с карточкой и графом."""
+    if st.session_state.gid_search.strip():
+        st.session_state.main_tab = TAB_NETWORK
+
+
 def select_top_gid() -> None:
     if st.session_state.top_gid:
         st.session_state.gid_search = st.session_state.top_gid
 
 
 with st.sidebar:
+    st.header("Поиск узла")
+    st.text_input("Найти по GID", key="gid_search", placeholder="100000…", on_change=go_network)
+    st.button("Сбросить выбор", on_click=reset_selection, width="stretch")
     st.header("Фильтры сети")
     roles = st.multiselect("Роли", list(theme.ROLE_LABELS), default=list(theme.ROLE_LABELS), format_func=lambda x: theme.ROLE_LABELS[x])
     cluster_values = sorted(int(x) for x in nodes["cluster_id"].dropna().unique())
     cluster_choice = st.selectbox("Кластер", ["Все"] + cluster_values)
     depth = st.radio("Глубина окрестности", [1, 2], horizontal=True)
-    st.text_input("Найти по GID", key="gid_search", placeholder="100000…")
-    st.button("Сбросить выбор", on_click=reset_selection, width="stretch")
 
 legend = " ".join(f"<span style='color:{color}'>●</span> {theme.ROLE_LABELS[role]}" for role, color in theme.ROLE_COLORS.items())
 st.markdown(legend + " &nbsp; ◇ seed", unsafe_allow_html=True)
@@ -140,10 +147,14 @@ with tab_network:
     selected = st.session_state.gid_search.strip() or None
     if selected and selected not in set(nodes["gid"]):
         st.warning(f"GID {selected} не найден. Проверьте число без пробелов.")
+    elif selected:
+        col_card, col_graph = st.columns([5, 6])
+        with col_card:
+            card.render_node_card(selected, nodes, edges, where="network")
+        with col_graph:
+            graph.render_network(nodes, edges, selected, roles, None if cluster_choice == "Все" else int(cluster_choice), depth)
     else:
         graph.render_network(nodes, edges, selected, roles, None if cluster_choice == "Все" else int(cluster_choice), depth)
-        if selected:
-            card.render_node_card(selected, nodes, edges)
 
 with tab_top:
     st.subheader("Узлы с наивысшим приоритетом проверки")
@@ -153,7 +164,7 @@ with tab_top:
         key="top_gid", on_change=select_top_gid,
     )
     if chosen_top:
-        card.render_node_card(chosen_top, nodes, edges)
+        card.render_node_card(chosen_top, nodes, edges, where="top")
 
 with tab_clusters:
     st.subheader("Кластеры и рабочие гипотезы")
