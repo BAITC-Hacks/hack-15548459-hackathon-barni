@@ -30,9 +30,9 @@ ROLE_LABELS = {
     "terminal": "Конечный", "peripheral": "Периферийный",
 }
 ROLE_COLORS = {
-    "coordinator": "#e63946", "consolidator": "#f77f00",
-    "distributor": "#fcbf49", "transit": "#457b9d",
-    "terminal": "#2a9d8f", "peripheral": "#94a3b8",
+    "coordinator": "#E5484D", "consolidator": "#8E4EC6",
+    "distributor": "#F5A524", "transit": "#3E9EF7",
+    "terminal": "#30A46C", "peripheral": "#6B7280",
 }
 
 st.set_page_config(page_title="Граф денег", page_icon="🔎", layout="wide")
