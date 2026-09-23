@@ -7,185 +7,33 @@ import sys
 import uuid
 from pathlib import Path
 
-import networkx as nx
-import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from dotenv import load_dotenv
-from pyvis.network import Network
 
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from pipeline.cards import node_card as pipeline_node_card  # noqa: E402
-
-NODES_PATH = ROOT / "outputs" / "nodes_roles.csv"
-TOP_PATH = ROOT / "outputs" / "top_nodes.csv"
-CLUSTERS_PATH = ROOT / "outputs" / "clusters.csv"
-EDGES_PATH = ROOT / "data" / "edges.parquet"
-
-ROLE_LABELS = {
-    "coordinator": "Координатор", "consolidator": "Консолидатор",
-    "distributor": "Распределитель", "transit": "Транзитный",
-    "terminal": "Конечный", "peripheral": "Периферийный",
-}
-ROLE_COLORS = {
-    "coordinator": "#E5484D", "consolidator": "#8E4EC6",
-    "distributor": "#F5A524", "transit": "#3E9EF7",
-    "terminal": "#30A46C", "peripheral": "#6B7280",
-}
-
 st.set_page_config(page_title="Граф денег", page_icon="🔎", layout="wide")
 
+from ui.aml import card, data, graph, theme  # noqa: E402
 
-@st.cache_data(show_spinner="Загружаю граф…")
-def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    nodes = pd.read_csv(NODES_PATH, dtype={"gid": "string"})
-    top = pd.read_csv(TOP_PATH, dtype={"gid": "string"})
-    clusters = pd.read_csv(CLUSTERS_PATH)
-    edges = pd.read_parquet(EDGES_PATH)
-    edges["src"] = edges["src"].astype("string")
-    edges["dst"] = edges["dst"].astype("string")
-    nodes["gid"] = nodes["gid"].astype("string")
-    return nodes, top, clusters, edges
-
-
-def money(value: object) -> str:
-    try:
-        amount = float(value)
-        if abs(amount) >= 1_000_000:
-            return f"{amount / 1_000_000:.1f}".replace(".", ",") + " млн ₸"
-        if abs(amount) >= 1_000:
-            return f"{amount / 1_000:.0f}".replace(".", ",") + " тыс ₸"
-        return f"{amount:,.0f} ₸".replace(",", " ")
-    except (TypeError, ValueError):
-        return "—"
-
-
-def bool_value(value: object) -> bool:
-    return str(value).strip().lower() in {"true", "1", "yes"}
-
-
-def neighborhood(edges: pd.DataFrame, gid: str, depth: int) -> set[str]:
-    chosen, frontier = {gid}, {gid}
-    for _ in range(depth):
-        mask = edges["src"].isin(frontier) | edges["dst"].isin(frontier)
-        nxt = set(edges.loc[mask, "src"]) | set(edges.loc[mask, "dst"])
-        frontier = nxt - chosen
-        chosen |= nxt
-    return chosen
-
-
-def graph_html(nodes: pd.DataFrame, edges: pd.DataFrame, selected: str | None) -> str:
-    net = Network(height="660px", width="100%", directed=True, bgcolor="#0b1120", font_color="#f8fafc")
-    net.set_options(json.dumps({
-        "physics": {"stabilization": {"iterations": 180}, "barnesHut": {"gravitationalConstant": -4800}},
-        "interaction": {"hover": True, "navigationButtons": True},
-        "edges": {"smooth": {"type": "dynamic"}, "arrows": {"to": {"enabled": True, "scaleFactor": 0.7}}},
-    }))
-    node_ids = set(nodes["gid"])
-    for row in nodes.itertuples(index=False):
-        gid, role = str(row.gid), str(row.role)
-        priority = float(getattr(row, "priority_score", 0) or 0)
-        seed = bool_value(getattr(row, "is_seed", False))
-        title = (f"gid: {gid}\n"
-                 f"Роль: {ROLE_LABELS.get(role, role)}\n"
-                 f"Признаки: {getattr(row, 'evidence', '—')}")
-        net.add_node(gid, label=gid[-6:], title=title, color={
-            "background": "#ffffff" if gid == selected else ROLE_COLORS.get(role, "#94a3b8"),
-            "border": "#ffffff" if seed else ROLE_COLORS.get(role, "#94a3b8"),
-            "highlight": {"background": "#ffffff", "border": "#f8fafc"},
-        }, borderWidth=5 if seed or gid == selected else 2, size=12 + 28 * max(0, priority), shape="diamond" if seed else "dot")
-    visible = edges[edges["src"].isin(node_ids) & edges["dst"].isin(node_ids)].copy()
-    max_sum = max(float(visible["sum_kzt"].max() or 1), 1) if not visible.empty else 1
-    for row in visible.itertuples(index=False):
-        amount = float(row.sum_kzt)
-        net.add_edge(str(row.src), str(row.dst), value=1 + 8 * (amount / max_sum) ** 0.5,
-                     title=f"{money(amount)} · переводов: {int(row.n_tx)}")
-    page = net.generate_html(notebook=False)
-    return page.replace(
-        "</head>",
-        "<style>html,body,#mynetwork{margin:0!important;padding:0!important;"
-        "background:#0b1120!important;border:0!important;}</style></head>",
-    )
-
-
-def render_node_card(gid: str, nodes: pd.DataFrame, edges: pd.DataFrame) -> None:
-    match = nodes[nodes["gid"] == gid]
-    if match.empty:
-        st.warning(f"GID {gid} не найден в выгрузке.")
-        return
-    row = match.iloc[0]
-    st.markdown(pipeline_node_card(gid))
-    badges = []
-    if float(row.get("n_cycles", 0) or 0) > 0:
-        badges.append(f"🔄 Циклы: {int(row.get('n_cycles', 0))}")
-    if float(row.get("n_fast_chains", 0) or 0) > 0:
-        badges.append(f"⚡ Быстрые цепочки: {int(row.get('n_fast_chains', 0))}")
-    if bool_value(row.get("split_flag", False)):
-        badges.append("🧩 Дробление")
-    if float(row.get("anomaly_z", 0) or 0) >= 3:
-        badges.append(f"📈 Аномалия: {float(row.get('anomaly_z', 0)):.1f}σ")
-    if badges:
-        st.markdown(" &nbsp; ".join(f"`{badge}`" for badge in badges), unsafe_allow_html=True)
-    if bool_value(row.get("truncated", False)):
-        st.error("Обрыв выгрузки на 4-м колене: исходящие не выгружены. Нужен дополнительный запрос данных.")
-    st.markdown(f"**{ROLE_LABELS.get(str(row.role), row.role)}** (`{row.role}`) · правило `{row.get('rule', '—')}` · кластер `{row.get('cluster_id', '—')}`")
-    st.info(f"Гипотеза для проверки: {row.get('evidence', 'Признаки не описаны')} — это не утверждение о виновности.")
-    a, b, c, d = st.columns(4)
-    a.metric("Role score", f"{float(row.get('role_score', 0)):.3f}")
-    b.metric("Приоритет", f"{float(row.get('priority_score', 0)):.3f}")
-    c.metric("Получено", money(row.get("in_kzt")))
-    d.metric("Отправлено", money(row.get("out_kzt")))
-    a, b, c, d = st.columns(4)
-    a.metric("Плательщиков", int(row.get("in_deg", 0)))
-    b.metric("Получателей", int(row.get("out_deg", 0)))
-    c.metric("Быстрый транзит", f"{float(row.get('fast_share', 0)):.0%}")
-    d.metric("Seed в 2 шагах", int(row.get("seeds_2hop", 0)))
-    incoming = edges[edges["dst"] == gid][["src", "sum_kzt", "n_tx"]].rename(columns={"src": "gid", "sum_kzt": "сумма, ₸", "n_tx": "переводов"})
-    outgoing = edges[edges["src"] == gid][["dst", "sum_kzt", "n_tx"]].rename(columns={"dst": "gid", "sum_kzt": "сумма, ₸", "n_tx": "переводов"})
-    left, right = st.columns(2)
-    left.markdown("#### От кого получил")
-    left.dataframe(incoming.sort_values("сумма, ₸", ascending=False), hide_index=True, use_container_width=True)
-    right.markdown("#### Кому отправил")
-    right.dataframe(outgoing.sort_values("сумма, ₸", ascending=False), hide_index=True, use_container_width=True)
-
-
-def render_network(nodes: pd.DataFrame, edges: pd.DataFrame, gid: str | None, roles: list[str], cluster: int | None, depth: int) -> None:
-    if gid:
-        ids = neighborhood(edges, gid, depth)
-    elif cluster is not None:
-        ids = set(nodes.loc[nodes["cluster_id"] == cluster, "gid"])
-    else:
-        ids = set(nodes.nlargest(50, "priority_score")["gid"])
-    shown = nodes[nodes["gid"].isin(ids) & nodes["role"].isin(roles)]
-    if len(shown) > 300:
-        limited = shown.nlargest(300, "priority_score")
-        if gid and gid in set(shown["gid"]) and gid not in set(limited["gid"]):
-            limited = pd.concat([limited.iloc[:-1], shown[shown["gid"] == gid]])
-        shown = limited
-    if shown.empty:
-        st.warning("После фильтрации не осталось узлов.")
-        return
-    components.html(graph_html(shown, edges, gid), height=680, scrolling=False)
-
+TAB_HOME = "🏠 Кого проверять первым"
+TAB_NETWORK = "🕸️ Сеть"
+TAB_TOP = "📋 Топ приоритетов"
+TAB_CLUSTERS = "🧩 Кластеры"
+TAB_AI = "🤖 AI-ассистент"
+TAB_LABELS = [TAB_HOME, TAB_NETWORK, TAB_TOP, TAB_CLUSTERS, TAB_AI]
+KEY_ROLES = {"coordinator", "consolidator", "distributor"}
 
 try:
-    nodes, top, clusters, edges = load_data()
+    nodes, top, clusters, edges = data.load_data()
 except Exception as exc:
     st.error(f"Не удалось загрузить данные графа: {exc}")
     st.stop()
 
-st.markdown(
-    "<style>"
-    ".block-container{padding-top:2.5rem!important;}"
-    "div[data-testid='stIFrame'],div[data-testid='stIFrame'] iframe{"
-    "background:#0b1120!important;border:0!important;}"
-    "</style>",
-    unsafe_allow_html=True,
-)
+st.markdown(theme.GLOBAL_CSS, unsafe_allow_html=True)
 st.title("🔎 Граф денег")
 st.caption("Роли и связи — аналитические признаки для проверки, а не утверждение о виновности.")
 
@@ -204,52 +52,114 @@ def select_top_gid() -> None:
     if st.session_state.top_gid:
         st.session_state.gid_search = st.session_state.top_gid
 
+
 with st.sidebar:
     st.header("Фильтры сети")
-    roles = st.multiselect("Роли", list(ROLE_LABELS), default=list(ROLE_LABELS), format_func=lambda x: ROLE_LABELS[x])
+    roles = st.multiselect("Роли", list(theme.ROLE_LABELS), default=list(theme.ROLE_LABELS), format_func=lambda x: theme.ROLE_LABELS[x])
     cluster_values = sorted(int(x) for x in nodes["cluster_id"].dropna().unique())
     cluster_choice = st.selectbox("Кластер", ["Все"] + cluster_values)
     depth = st.radio("Глубина окрестности", [1, 2], horizontal=True)
     st.text_input("Найти по GID", key="gid_search", placeholder="100000…")
-    st.button("Сбросить выбор", on_click=reset_selection, use_container_width=True)
+    st.button("Сбросить выбор", on_click=reset_selection, width="stretch")
 
-legend = " ".join(f"<span style='color:{color}'>●</span> {ROLE_LABELS[role]}" for role, color in ROLE_COLORS.items())
+legend = " ".join(f"<span style='color:{color}'>●</span> {theme.ROLE_LABELS[role]}" for role, color in theme.ROLE_COLORS.items())
 st.markdown(legend + " &nbsp; ◇ seed", unsafe_allow_html=True)
 
-tab_network, tab_top, tab_clusters, tab_ai = st.tabs(["Сеть", "Топ приоритетов", "Кластеры", "AI-ассистент"])
+try:
+    tab_home, tab_network, tab_top, tab_clusters, tab_ai = st.tabs(
+        TAB_LABELS, key="main_tab", default=TAB_HOME, on_change="rerun",
+    )
+    tabs_switchable = True
+except TypeError:
+    tab_home, tab_network, tab_top, tab_clusters, tab_ai = st.tabs(TAB_LABELS)
+    tabs_switchable = False
+
+
+def open_node(gid: str) -> None:
+    st.session_state.gid_search = gid
+    if tabs_switchable:
+        st.session_state.main_tab = TAB_NETWORK
+    else:
+        st.session_state._open_node_fallback = True
+
+
+with tab_home:
+    seed_count = int(nodes["is_seed"].map(data.bool_value).sum())
+    node_count = len(nodes)
+    key_role_count = int(nodes["role"].isin(KEY_ROLES).sum())
+
+    st.markdown(
+        f"Сеть — переводы клиентов банка от **{seed_count}** известных seed-клиентов "
+        f"до 4-го колена, **{node_count:,}**".replace(",", " ") + " узлов.  \n"
+        "Инструмент по правилам определяет роли узлов и порядок проверки — "
+        "это гипотезы для проверки, а не обвинения."
+    )
+
+    report = data.load_report()
+    resilience_20 = next((r for r in report["resilience"] if r["removed_top"] == 20), None)
+    if resilience_20 and report["base_component"]:
+        removal_value = f"{resilience_20['components']} частей"
+        removal_help = f"крупнейшая компонента {report['base_component']} → {resilience_20['largest_component']} узлов"
+    else:
+        removal_value = "—"
+        removal_help = "Отчёт пайплайна недоступен (outputs/report.md)"
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Узлов в сети", f"{node_count:,}".replace(",", " "))
+    m2.metric("Известных seed", seed_count)
+    m3.metric(
+        "Ключевых узлов", key_role_count,
+        help="Координаторы, консолидаторы и распределители — узлы с наибольшим влиянием на потоки",
+    )
+    m4.metric("Изъятие топ-20", removal_value, help=removal_help)
+
+    if st.session_state.pop("_open_node_fallback", False):
+        st.success("Карточка открыта во вкладке «Сеть»")
+
+    st.subheader("Топ-10 по приоритету проверки")
+    for _, trow in top.head(10).iterrows():
+        gid = str(trow["gid"])
+        with st.container(border=True):
+            c_rank, c_gid, c_role, c_prio, c_why, c_btn = st.columns([0.6, 2.3, 1.6, 1.3, 3.6, 1.1])
+            c_rank.markdown(f"**#{int(trow['rank'])}**")
+            c_gid.markdown(f"`{gid}`")
+            c_role.markdown(theme.role_badge(str(trow["role"])), unsafe_allow_html=True)
+            priority = float(trow["priority_score"])
+            c_prio.progress(min(max(priority, 0.0), 1.0), text=f"{priority:.2f}")
+            c_why.caption(data.short_why(trow["why"]))
+            c_btn.button("Открыть", key=f"open_{gid}", on_click=open_node, args=(gid,), width="stretch")
 
 with tab_network:
     cols = st.columns(5)
     cols[0].metric("Узлов", f"{len(nodes):,}".replace(",", " "))
-    cols[1].metric("Seed", int(nodes["is_seed"].map(bool_value).sum()))
-    cols[2].metric("Оборот", money(edges["sum_kzt"].sum()))
+    cols[1].metric("Seed", int(nodes["is_seed"].map(data.bool_value).sum()))
+    cols[2].metric("Оборот", data.money(edges["sum_kzt"].sum()))
     role_counts = nodes["role"].value_counts()
-    key_roles = {"coordinator", "consolidator", "distributor"}
-    cols[3].metric("Ключевых узлов", int(nodes["role"].isin(key_roles).sum()))
+    cols[3].metric("Ключевых узлов", int(nodes["role"].isin(KEY_ROLES).sum()))
     cols[4].metric("Координаторов", int(role_counts.get("coordinator", 0)))
     selected = st.session_state.gid_search.strip() or None
     if selected and selected not in set(nodes["gid"]):
         st.warning(f"GID {selected} не найден. Проверьте число без пробелов.")
     else:
-        render_network(nodes, edges, selected, roles, None if cluster_choice == "Все" else int(cluster_choice), depth)
+        graph.render_network(nodes, edges, selected, roles, None if cluster_choice == "Все" else int(cluster_choice), depth)
         if selected:
-            render_node_card(selected, nodes, edges)
+            card.render_node_card(selected, nodes, edges)
 
 with tab_top:
     st.subheader("Узлы с наивысшим приоритетом проверки")
-    st.dataframe(top, hide_index=True, use_container_width=True)
+    st.dataframe(top, hide_index=True, width="stretch")
     chosen_top = st.selectbox(
         "Открыть карточку", [""] + top["gid"].astype(str).tolist(),
         key="top_gid", on_change=select_top_gid,
     )
     if chosen_top:
-        render_node_card(chosen_top, nodes, edges)
+        card.render_node_card(chosen_top, nodes, edges)
 
 with tab_clusters:
     st.subheader("Кластеры и рабочие гипотезы")
-    st.dataframe(clusters, hide_index=True, use_container_width=True)
+    st.dataframe(clusters, hide_index=True, width="stretch")
     chosen_cluster = st.selectbox("Показать кластер", cluster_values, key="cluster_gid")
-    render_network(nodes, edges, None, roles, int(chosen_cluster), depth)
+    graph.render_network(nodes, edges, None, roles, int(chosen_cluster), depth)
 
 with tab_ai:
     st.subheader("AI-ассистент по графу")
@@ -284,4 +194,3 @@ with tab_ai:
                 answer = f"Не удалось получить ответ ассистента: {exc}"
             st.session_state.graph_chat.append({"role": "assistant", "content": answer, "steps": steps})
             st.rerun()
-
