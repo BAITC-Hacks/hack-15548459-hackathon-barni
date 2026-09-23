@@ -135,6 +135,9 @@ def _cached_graph_html(node_ids: tuple[str, ...], selected: str | None) -> str:
 
 
 def render_network(nodes: pd.DataFrame, edges: pd.DataFrame, gid: str | None, roles: list[str], cluster: int | None, depth: int) -> None:
+    if not roles:
+        st.info("Выберите хотя бы одну роль")
+        return
     if gid:
         ids = neighborhood(edges, gid, depth)
     elif cluster is not None:

@@ -13,7 +13,9 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-st.set_page_config(page_title="Граф денег", page_icon="🔎", layout="wide")
+st.set_page_config(
+    layout="wide", page_title="Граф денег — AML", page_icon="🔎", initial_sidebar_state="expanded",
+)
 
 from ui.aml import assistant, card, data, explain, graph, theme  # noqa: E402
 
@@ -63,12 +65,23 @@ with st.sidebar:
     st.text_input("Найти по GID", key="gid_search", placeholder="100000…", on_change=go_network)
     st.button("Сбросить выбор", on_click=reset_selection, width="stretch")
     st.header("Фильтры сети")
-    roles = st.multiselect("Роли", list(theme.ROLE_LABELS), default=list(theme.ROLE_LABELS), format_func=lambda x: theme.ROLE_LABELS[x])
+    if hasattr(st, "pills"):
+        roles = st.pills(
+            "Роли", list(theme.ROLE_LABELS), selection_mode="multi",
+            default=list(theme.ROLE_LABELS), format_func=lambda x: theme.ROLE_LABELS[x],
+        ) or []
+    else:
+        roles = st.multiselect(
+            "Роли", list(theme.ROLE_LABELS), default=list(theme.ROLE_LABELS),
+            format_func=lambda x: theme.ROLE_LABELS[x],
+        )
     cluster_values = sorted(int(x) for x in nodes["cluster_id"].dropna().unique())
     cluster_choice = st.selectbox("Кластер", ["Все"] + cluster_values)
     depth = st.radio("Глубина окрестности", [1, 2], horizontal=True)
 
 role_counts_all = nodes["role"].value_counts()
+node_gids = set(nodes["gid"])
+seed_count_all = int(nodes["is_seed"].map(data.bool_value).sum())
 
 try:
     tab_home, tab_network, tab_top, tab_clusters, tab_ai, tab_howto = st.tabs(
@@ -89,7 +102,7 @@ def open_node(gid: str) -> None:
 
 
 with tab_home:
-    seed_count = int(nodes["is_seed"].map(data.bool_value).sum())
+    seed_count = seed_count_all
     node_count = len(nodes)
     key_role_count = int(nodes["role"].isin(KEY_ROLES).sum())
 
@@ -137,7 +150,7 @@ with tab_home:
 with tab_network:
     cols = st.columns(5)
     cols[0].metric("Узлов", f"{len(nodes):,}".replace(",", " "))
-    cols[1].metric("Seed", int(nodes["is_seed"].map(data.bool_value).sum()))
+    cols[1].metric("Seed", seed_count_all)
     cols[2].metric("Оборот", data.money(edges["sum_kzt"].sum()))
     cols[3].metric("Ключевых узлов", int(nodes["role"].isin(KEY_ROLES).sum()))
     cols[4].metric("Координаторов", int(role_counts_all.get("coordinator", 0)))
@@ -147,8 +160,11 @@ with tab_network:
         st.subheader(f"Окружение узла {selected} ({depth} {step_word})")
     else:
         st.subheader("Схема сети: топ-50 узлов по приоритету")
-    if selected and selected not in set(nodes["gid"]):
-        st.warning(f"GID {selected} не найден. Проверьте число без пробелов.")
+    if selected and selected not in node_gids:
+        if not selected.isdigit():
+            st.warning("gid — это 18 цифр (только цифры, без пробелов).")
+        else:
+            st.warning(f"Узел {selected} не найден в выгрузке. Проверьте 18 цифр без пробелов.")
     elif selected:
         col_card, col_graph = st.columns([5, 6])
         with col_card:

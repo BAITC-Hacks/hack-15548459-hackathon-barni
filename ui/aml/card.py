@@ -44,7 +44,7 @@ def _make_navigate(table: pd.DataFrame, key: str):
 def _render_flow_table(title: str, table: pd.DataFrame, key: str) -> None:
     st.markdown(f"##### {title}")
     if table.empty:
-        st.caption("Нет переводов в выгрузке")
+        st.caption("Переводов в выгрузке нет")
         return
     st.caption("Нажмите на строку, чтобы перейти к узлу")
     st.dataframe(
@@ -57,7 +57,7 @@ def render_node_card(gid: str, nodes: pd.DataFrame, edges: pd.DataFrame, where: 
     """Отрисовывает карточку узла gid. ``where`` делает ключи виджетов уникальными между вкладками."""
     match = nodes[nodes["gid"] == gid]
     if match.empty:
-        st.warning(f"GID {gid} не найден в выгрузке.")
+        st.warning(f"Узел {gid} не найден в выгрузке. Проверьте 18 цифр без пробелов.")
         return
     row = match.iloc[0]
     role = str(row.role)
