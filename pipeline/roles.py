@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 
+from . import patterns
 from .config import THRESHOLDS as T
 
 
@@ -20,6 +21,17 @@ def pct(x):
 
 def _clip(x):
     return float(min(1.0, max(0.0, x)))
+
+
+WHY_MAX = 300  # why в top_nodes.csv: evidence (≤200) + пояснения, заметки добавляются целиком
+
+
+def _append_fitting(text, notes, limit):
+    """Дописывает заметки через «; » целиком, пока строка не длиннее limit."""
+    for note in notes:
+        if len(text) + 2 + len(note) <= limit:
+            text = f"{text}; {note}"
+    return text
 
 
 def assign(df):
@@ -103,9 +115,11 @@ def assign(df):
                       + ("отдаёт больше полученного: вероятны поступления извне выборки" if not pd.isna(pt) and pt > T["transit_pass_max_fast"]
                          else "удерживает часть средств, признаков роли недостаточно"))
 
+        evidence = _append_fitting(ev[:200], patterns.notes(r), 200)
+
         roles.append(role)
         scores.append(round(score, 3))
-        evid.append(ev[:200])
+        evid.append(evidence)
         rules.append(rule)
 
     df["role"], df["role_score"], df["evidence"], df["rule"] = roles, scores, evid, rules
@@ -115,12 +129,19 @@ def assign(df):
 def priority(df):
     """Приоритет проверки 0–1: взвешенная сумма перцентилей + вес роли."""
     w = T["priority_weights"]
+    pattern_component = (
+        (df.get("n_cycles", pd.Series(0, index=df.index)) > 0).astype(float)
+        + (df.get("n_fast_chains", pd.Series(0, index=df.index)) > 0).astype(float)
+        + df.get("split_flag", pd.Series(False, index=df.index)).astype(float)
+        + (df.get("anomaly_z", pd.Series(0.0, index=df.index)) >= T["anomaly_z"]).astype(float)
+    ) / 4
     comp = (
         w["role"] * df.role.map(T["role_weight"])
         + w["flow"] * df.flow_kzt.rank(pct=True)
         + w["seeds"] * df.seeds_2hop.rank(pct=True)
         + w["pagerank"] * df.pagerank.rank(pct=True)
         + w["betweenness"] * df.betweenness.rank(pct=True)
+        + w["patterns"] * pattern_component
     )
     df = df.copy()
     df["priority_score"] = ((comp - comp.min()) / (comp.max() - comp.min())).round(4)
@@ -133,4 +154,6 @@ def why(r):
         extra.append(f"{r.seeds_2hop} seed в 2 шагах выше")
     if r.fast_share == r.fast_share and r.fast_share >= 0.5 and "дн. после" not in r.evidence:
         extra.append(f"{pct(r.fast_share)} суммы уходит за 2 дня")
-    return f"{r.evidence}. " + "; ".join(extra).capitalize()
+    tail = _append_fitting("; ".join(extra), [n for n in patterns.notes(r) if n not in r.evidence],
+                           WHY_MAX - len(r.evidence) - 2)
+    return f"{r.evidence}. " + tail[:1].upper() + tail[1:]

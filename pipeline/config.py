@@ -36,10 +36,19 @@ THRESHOLDS = {
     # приоритет
     "role_weight": {"coordinator": 1.0, "consolidator": 0.9, "distributor": 0.8,
                     "transit": 0.6, "terminal": 0.5, "peripheral": 0.1},
-    "priority_weights": {"role": 0.35, "flow": 0.20, "seeds": 0.20, "pagerank": 0.15, "betweenness": 0.10},
+    "priority_weights": {"role": 0.35, "flow": 0.20, "seeds": 0.20, "pagerank": 0.15, "betweenness": 0.10,
+                        "patterns": 0.10},
 
     "louvain_seed": 42,
     "top_n": 30,
+
+    # паттерны (patterns.py)
+    "cycle_max_len": 6,
+    "chain_days": 2,
+    "split_min_tx": 2,
+    "split_min_kzt": 5000,
+    "split_max_kzt": 10000,
+    "anomaly_z": 3.0,
 }
 
 ROLES = ["consolidator", "transit", "distributor", "terminal", "coordinator", "peripheral"]
