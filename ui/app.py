@@ -12,7 +12,10 @@ import networkx as nx
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from dotenv import load_dotenv
 from pyvis.network import Network
+
+load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
