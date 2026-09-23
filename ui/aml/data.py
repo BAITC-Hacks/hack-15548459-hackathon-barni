@@ -13,6 +13,7 @@ NODES_PATH = ROOT / "outputs" / "nodes_roles.csv"
 TOP_PATH = ROOT / "outputs" / "top_nodes.csv"
 CLUSTERS_PATH = ROOT / "outputs" / "clusters.csv"
 EDGES_PATH = ROOT / "data" / "edges.parquet"
+TRANSACTIONS_PATH = ROOT / "data" / "transactions.parquet"
 REPORT_PATH = ROOT / "outputs" / "report.md"
 
 
@@ -85,6 +86,31 @@ def load_report() -> dict:
         pass
 
     return result
+
+
+@st.cache_data(show_spinner=False)
+def transactions_count() -> int | None:
+    """Число строк ``data/transactions.parquet`` — дёшево, через метаданные pyarrow (без чтения данных).
+
+    ``None``, если файл недоступен или pyarrow не установлен — вызывающий код показывает «—».
+    """
+    try:
+        import pyarrow.parquet as pq
+        return int(pq.ParquetFile(TRANSACTIONS_PATH).metadata.num_rows)
+    except Exception:
+        return None
+
+
+def format_clusters_table(clusters: pd.DataFrame) -> pd.DataFrame:
+    """Таблица кластеров для ``st.dataframe``: русские колонки, ``top_gids`` скрыт, сортировка по числу узлов."""
+    table = clusters.sort_values("n_nodes", ascending=False).reset_index(drop=True)
+    return pd.DataFrame({
+        "№ кластера": table["cluster_id"],
+        "узлов": table["n_nodes"],
+        "seed": table["n_seed"],
+        "оборот внутри": table["sum_kzt_internal"].map(money),
+        "гипотеза": table["hypothesis"],
+    })
 
 
 def money(value: object) -> str:

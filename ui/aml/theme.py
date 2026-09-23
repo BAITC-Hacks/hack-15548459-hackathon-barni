@@ -53,22 +53,26 @@ def role_rgba(role: str, alpha: float = 0.55) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def legend_html(counts) -> str:
-    """Легенда сети: цветные пилюли ролей со счётчиком по всей сети + пояснения формы/толщины.
+def role_chips_html(counts) -> str:
+    """Цветные пилюли ролей со счётчиком (без пояснений — для легенды и карточки кластера).
 
     ``counts`` — что-то со `.get(role, 0)` (обычно ``nodes["role"].value_counts()``).
     """
     get = counts.get if hasattr(counts, "get") else (lambda _role, _default=0: _default)
-    chips = "".join(
+    return "".join(
         f"<span class='aml-chip'><span class='aml-dot' style='background:{color}'></span>"
         f"{ROLE_LABELS[role]} {int(get(role, 0) or 0)}</span>"
         for role, color in ROLE_COLORS.items()
     )
+
+
+def legend_html(counts) -> str:
+    """Легенда сети: цветные пилюли ролей со счётчиком по всей сети + пояснения формы/толщины."""
     notes = (
         "<span class='aml-chip-note'>◆ seed (белая рамка)</span>"
         "<span class='aml-chip-note'>→ направление денег, толщина = сумма, размер = приоритет</span>"
     )
-    return f"<div class='aml-legend'>{chips}{notes}</div>"
+    return f"<div class='aml-legend'>{role_chips_html(counts)}{notes}</div>"
 
 
 GLOBAL_CSS = (
@@ -90,5 +94,17 @@ GLOBAL_CSS = (
     "border-radius:999px;padding:3px 10px;white-space:nowrap;}"
     ".aml-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none;}"
     ".aml-chip-note{color:#94a3b8;white-space:nowrap;}"
+    ".aml-flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:6px 0 16px;}"
+    ".aml-flow-box{flex:1 1 200px;min-width:170px;background:#1e293b;color:#e2e8f0;"
+    "border-radius:10px;padding:10px 14px;font-size:0.82rem;line-height:1.4;}"
+    ".aml-flow-box b{color:#f8fafc;}"
+    ".aml-flow-arrow{display:flex;align-items:center;justify-content:center;"
+    "color:#94a3b8;font-size:1.3rem;font-weight:700;flex:0 0 auto;padding:0 2px;}"
+    ".aml-roles-table{width:100%;border-collapse:collapse;font-size:0.82rem;color:#e2e8f0;"
+    "background:#0f172a;border-radius:8px;overflow:hidden;}"
+    ".aml-roles-table th,.aml-roles-table td{padding:6px 10px;border-bottom:1px solid #334155;"
+    "text-align:left;vertical-align:top;}"
+    ".aml-roles-table th{color:#94a3b8;font-weight:600;white-space:nowrap;}"
+    ".aml-mono{font-family:monospace;white-space:nowrap;}"
     "</style>"
 )

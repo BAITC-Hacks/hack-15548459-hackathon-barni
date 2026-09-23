@@ -7,6 +7,7 @@ import sys
 import uuid
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -17,14 +18,15 @@ sys.path.insert(0, str(ROOT))
 
 st.set_page_config(page_title="Граф денег", page_icon="🔎", layout="wide")
 
-from ui.aml import card, data, graph, theme  # noqa: E402
+from ui.aml import card, data, explain, graph, theme  # noqa: E402
 
 TAB_HOME = "🏠 Кого проверять первым"
 TAB_NETWORK = "🕸️ Сеть"
 TAB_TOP = "📋 Топ приоритетов"
 TAB_CLUSTERS = "🧩 Кластеры"
 TAB_AI = "🤖 AI-ассистент"
-TAB_LABELS = [TAB_HOME, TAB_NETWORK, TAB_TOP, TAB_CLUSTERS, TAB_AI]
+TAB_HOWTO = "📘 Как это работает"
+TAB_LABELS = [TAB_HOME, TAB_NETWORK, TAB_TOP, TAB_CLUSTERS, TAB_AI, TAB_HOWTO]
 KEY_ROLES = {"coordinator", "consolidator", "distributor"}
 
 try:
@@ -72,12 +74,12 @@ with st.sidebar:
 role_counts_all = nodes["role"].value_counts()
 
 try:
-    tab_home, tab_network, tab_top, tab_clusters, tab_ai = st.tabs(
+    tab_home, tab_network, tab_top, tab_clusters, tab_ai, tab_howto = st.tabs(
         TAB_LABELS, key="main_tab", default=TAB_HOME, on_change="rerun",
     )
     tabs_switchable = True
 except TypeError:
-    tab_home, tab_network, tab_top, tab_clusters, tab_ai = st.tabs(TAB_LABELS)
+    tab_home, tab_network, tab_top, tab_clusters, tab_ai, tab_howto = st.tabs(TAB_LABELS)
     tabs_switchable = False
 
 
@@ -171,12 +173,73 @@ with tab_top:
     if chosen_top:
         card.render_node_card(chosen_top, nodes, edges, where="top")
 
+def select_cluster_row(table: pd.DataFrame, key: str):
+    """Колбэк для клика по строке таблицы кластеров: переводит cluster_gid на выбранный кластер."""
+    def _navigate() -> None:
+        state = st.session_state.get(key)
+        rows = getattr(getattr(state, "selection", None), "rows", None) if state is not None else None
+        if rows:
+            idx = rows[0]
+            if 0 <= idx < len(table):
+                st.session_state["cluster_gid"] = int(table.iloc[idx]["№ кластера"])
+    return _navigate
+
+
 with tab_clusters:
     st.subheader("Кластеры и рабочие гипотезы")
-    st.dataframe(clusters, hide_index=True, width="stretch")
-    chosen_cluster = st.selectbox("Показать кластер", cluster_values, key="cluster_gid")
-    st.markdown(theme.legend_html(role_counts_all), unsafe_allow_html=True)
-    graph.render_network(nodes, edges, None, roles, int(chosen_cluster), depth)
+    st.caption(
+        "Кластер — группа узлов, которые переводят деньги в основном друг другу "
+        "(алгоритм Louvain по суммам переводов). Гипотеза — что в группе видно по ролям."
+    )
+    clusters_table = data.format_clusters_table(clusters)
+    st.dataframe(
+        clusters_table, hide_index=True, width="stretch", key="clusters_table",
+        on_select=select_cluster_row(clusters_table, "clusters_table"), selection_mode="single-row",
+        column_config={"гипотеза": st.column_config.TextColumn("гипотеза", width="large")},
+    )
+
+    cluster_info = clusters.set_index("cluster_id")
+
+    def _cluster_option_label(cid: int) -> str:
+        if cid not in cluster_info.index:
+            return f"#{cid}"
+        crow = cluster_info.loc[cid]
+        return f"#{cid} — {int(crow['n_nodes'])} узлов, {int(crow['n_seed'])} seed"
+
+    chosen_cluster = st.selectbox(
+        "Показать кластер", cluster_values, key="cluster_gid", format_func=_cluster_option_label,
+    )
+    cid = int(chosen_cluster)
+    cluster_nodes = nodes[nodes["cluster_id"] == cid]
+    crow = cluster_info.loc[cid] if cid in cluster_info.index else None
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Узлов", len(cluster_nodes))
+    m2.metric("Seed", int(cluster_nodes["is_seed"].map(data.bool_value).sum()))
+    m3.metric("Оборот внутри", data.money(crow["sum_kzt_internal"]) if crow is not None else "—")
+
+    st.markdown(
+        f"<div class='aml-legend'>{theme.role_chips_html(cluster_nodes['role'].value_counts())}</div>",
+        unsafe_allow_html=True,
+    )
+    st.info(crow["hypothesis"] if crow is not None else "Гипотеза недоступна")
+
+    graph.render_network(nodes, edges, None, roles, cid, depth)
+
+    st.markdown("##### Топ-узлы кластера")
+    top_in_cluster = cluster_nodes.nlargest(5, "priority_score")
+    if top_in_cluster.empty:
+        st.caption("Нет узлов в кластере")
+    else:
+        for _, ctrow in top_in_cluster.iterrows():
+            cgid = str(ctrow["gid"])
+            with st.container(border=True):
+                c_gid, c_role, c_prio, c_btn = st.columns([2.5, 1.8, 1.5, 1.2])
+                c_gid.markdown(f"`{cgid}`")
+                c_role.markdown(theme.role_badge(str(ctrow["role"])), unsafe_allow_html=True)
+                cpriority = float(ctrow["priority_score"])
+                c_prio.progress(min(max(cpriority, 0.0), 1.0), text=f"{cpriority:.2f}")
+                c_btn.button("Открыть", key=f"cl_open_{cgid}", on_click=open_node, args=(cgid,), width="stretch")
 
 with tab_ai:
     st.subheader("AI-ассистент по графу")
@@ -211,3 +274,6 @@ with tab_ai:
                 answer = f"Не удалось получить ответ ассистента: {exc}"
             st.session_state.graph_chat.append({"role": "assistant", "content": answer, "steps": steps})
             st.rerun()
+
+with tab_howto:
+    explain.render_how_it_works(nodes)
