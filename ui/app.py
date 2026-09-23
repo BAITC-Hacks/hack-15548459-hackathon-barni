@@ -1,7 +1,6 @@
 """Русский интерфейс AML-графа: ``streamlit run ui/app.py``."""
 from __future__ import annotations
 
-import html
 import json
 import os
 import sys
@@ -84,9 +83,9 @@ def graph_html(nodes: pd.DataFrame, edges: pd.DataFrame, selected: str | None) -
         gid, role = str(row.gid), str(row.role)
         priority = float(getattr(row, "priority_score", 0) or 0)
         seed = bool_value(getattr(row, "is_seed", False))
-        title = (f"<b>gid:</b> {html.escape(gid)}<br><b>Роль:</b> "
-                 f"{html.escape(ROLE_LABELS.get(role, role))}<br><b>Признаки:</b> "
-                 f"{html.escape(str(getattr(row, 'evidence', '—')))}")
+        title = (f"gid: {gid}\n"
+                 f"Роль: {ROLE_LABELS.get(role, role)}\n"
+                 f"Признаки: {getattr(row, 'evidence', '—')}")
         net.add_node(gid, label=gid[-6:], title=title, color={
             "background": "#ffffff" if gid == selected else ROLE_COLORS.get(role, "#94a3b8"),
             "border": "#ffffff" if seed else ROLE_COLORS.get(role, "#94a3b8"),
