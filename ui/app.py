@@ -1,12 +1,10 @@
 """Русский интерфейс AML-графа: ``streamlit run ui/app.py``."""
 from __future__ import annotations
 
-import json
-import os
 import sys
-import uuid
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -15,16 +13,19 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-st.set_page_config(page_title="Граф денег", page_icon="🔎", layout="wide")
+st.set_page_config(
+    layout="wide", page_title="Граф денег — AML", page_icon="🔎", initial_sidebar_state="expanded",
+)
 
-from ui.aml import card, data, graph, theme  # noqa: E402
+from ui.aml import assistant, card, data, explain, graph, theme  # noqa: E402
 
 TAB_HOME = "🏠 Кого проверять первым"
 TAB_NETWORK = "🕸️ Сеть"
 TAB_TOP = "📋 Топ приоритетов"
 TAB_CLUSTERS = "🧩 Кластеры"
 TAB_AI = "🤖 AI-ассистент"
-TAB_LABELS = [TAB_HOME, TAB_NETWORK, TAB_TOP, TAB_CLUSTERS, TAB_AI]
+TAB_HOWTO = "📘 Как это работает"
+TAB_LABELS = [TAB_HOME, TAB_NETWORK, TAB_TOP, TAB_CLUSTERS, TAB_AI, TAB_HOWTO]
 KEY_ROLES = {"coordinator", "consolidator", "distributor"}
 
 try:
@@ -48,30 +49,47 @@ def reset_selection() -> None:
     st.session_state.top_gid = ""
 
 
+def go_network() -> None:
+    """Ввели gid в поиске → сразу показать вкладку с карточкой и графом."""
+    if st.session_state.gid_search.strip():
+        st.session_state.main_tab = TAB_NETWORK
+
+
 def select_top_gid() -> None:
     if st.session_state.top_gid:
         st.session_state.gid_search = st.session_state.top_gid
 
 
 with st.sidebar:
+    st.header("Поиск узла")
+    st.text_input("Найти по GID", key="gid_search", placeholder="100000…", on_change=go_network)
+    st.button("Сбросить выбор", on_click=reset_selection, width="stretch")
     st.header("Фильтры сети")
-    roles = st.multiselect("Роли", list(theme.ROLE_LABELS), default=list(theme.ROLE_LABELS), format_func=lambda x: theme.ROLE_LABELS[x])
+    if hasattr(st, "pills"):
+        roles = st.pills(
+            "Роли", list(theme.ROLE_LABELS), selection_mode="multi",
+            default=list(theme.ROLE_LABELS), format_func=lambda x: theme.ROLE_LABELS[x],
+        ) or []
+    else:
+        roles = st.multiselect(
+            "Роли", list(theme.ROLE_LABELS), default=list(theme.ROLE_LABELS),
+            format_func=lambda x: theme.ROLE_LABELS[x],
+        )
     cluster_values = sorted(int(x) for x in nodes["cluster_id"].dropna().unique())
     cluster_choice = st.selectbox("Кластер", ["Все"] + cluster_values)
     depth = st.radio("Глубина окрестности", [1, 2], horizontal=True)
-    st.text_input("Найти по GID", key="gid_search", placeholder="100000…")
-    st.button("Сбросить выбор", on_click=reset_selection, width="stretch")
 
-legend = " ".join(f"<span style='color:{color}'>●</span> {theme.ROLE_LABELS[role]}" for role, color in theme.ROLE_COLORS.items())
-st.markdown(legend + " &nbsp; ◇ seed", unsafe_allow_html=True)
+role_counts_all = nodes["role"].value_counts()
+node_gids = set(nodes["gid"])
+seed_count_all = int(nodes["is_seed"].map(data.bool_value).sum())
 
 try:
-    tab_home, tab_network, tab_top, tab_clusters, tab_ai = st.tabs(
+    tab_home, tab_network, tab_top, tab_clusters, tab_ai, tab_howto = st.tabs(
         TAB_LABELS, key="main_tab", default=TAB_HOME, on_change="rerun",
     )
     tabs_switchable = True
 except TypeError:
-    tab_home, tab_network, tab_top, tab_clusters, tab_ai = st.tabs(TAB_LABELS)
+    tab_home, tab_network, tab_top, tab_clusters, tab_ai, tab_howto = st.tabs(TAB_LABELS)
     tabs_switchable = False
 
 
@@ -84,7 +102,7 @@ def open_node(gid: str) -> None:
 
 
 with tab_home:
-    seed_count = int(nodes["is_seed"].map(data.bool_value).sum())
+    seed_count = seed_count_all
     node_count = len(nodes)
     key_role_count = int(nodes["role"].isin(KEY_ROLES).sum())
 
@@ -132,18 +150,31 @@ with tab_home:
 with tab_network:
     cols = st.columns(5)
     cols[0].metric("Узлов", f"{len(nodes):,}".replace(",", " "))
-    cols[1].metric("Seed", int(nodes["is_seed"].map(data.bool_value).sum()))
+    cols[1].metric("Seed", seed_count_all)
     cols[2].metric("Оборот", data.money(edges["sum_kzt"].sum()))
-    role_counts = nodes["role"].value_counts()
     cols[3].metric("Ключевых узлов", int(nodes["role"].isin(KEY_ROLES).sum()))
-    cols[4].metric("Координаторов", int(role_counts.get("coordinator", 0)))
+    cols[4].metric("Координаторов", int(role_counts_all.get("coordinator", 0)))
     selected = st.session_state.gid_search.strip() or None
-    if selected and selected not in set(nodes["gid"]):
-        st.warning(f"GID {selected} не найден. Проверьте число без пробелов.")
+    if selected:
+        step_word = "шаг" if depth == 1 else "шага"
+        st.subheader(f"Окружение узла {selected} ({depth} {step_word})")
     else:
+        st.subheader("Схема сети: топ-50 узлов по приоритету")
+    if selected and selected not in node_gids:
+        if not selected.isdigit():
+            st.warning("gid — это 18 цифр (только цифры, без пробелов).")
+        else:
+            st.warning(f"Узел {selected} не найден в выгрузке. Проверьте 18 цифр без пробелов.")
+    elif selected:
+        col_card, col_graph = st.columns([5, 6])
+        with col_card:
+            card.render_node_card(selected, nodes, edges, where="network")
+        with col_graph:
+            st.markdown(theme.legend_html(role_counts_all), unsafe_allow_html=True)
+            graph.render_network(nodes, edges, selected, roles, None if cluster_choice == "Все" else int(cluster_choice), depth)
+    else:
+        st.markdown(theme.legend_html(role_counts_all), unsafe_allow_html=True)
         graph.render_network(nodes, edges, selected, roles, None if cluster_choice == "Все" else int(cluster_choice), depth)
-        if selected:
-            card.render_node_card(selected, nodes, edges)
 
 with tab_top:
     st.subheader("Узлы с наивысшим приоритетом проверки")
@@ -153,44 +184,78 @@ with tab_top:
         key="top_gid", on_change=select_top_gid,
     )
     if chosen_top:
-        card.render_node_card(chosen_top, nodes, edges)
+        card.render_node_card(chosen_top, nodes, edges, where="top")
+
+def select_cluster_row(table: pd.DataFrame, key: str):
+    """Колбэк для клика по строке таблицы кластеров: переводит cluster_gid на выбранный кластер."""
+    def _navigate() -> None:
+        state = st.session_state.get(key)
+        rows = getattr(getattr(state, "selection", None), "rows", None) if state is not None else None
+        if rows:
+            idx = rows[0]
+            if 0 <= idx < len(table):
+                st.session_state["cluster_gid"] = int(table.iloc[idx]["№ кластера"])
+    return _navigate
+
 
 with tab_clusters:
     st.subheader("Кластеры и рабочие гипотезы")
-    st.dataframe(clusters, hide_index=True, width="stretch")
-    chosen_cluster = st.selectbox("Показать кластер", cluster_values, key="cluster_gid")
-    graph.render_network(nodes, edges, None, roles, int(chosen_cluster), depth)
+    st.caption(
+        "Кластер — группа узлов, которые переводят деньги в основном друг другу "
+        "(алгоритм Louvain по суммам переводов). Гипотеза — что в группе видно по ролям."
+    )
+    clusters_table = data.format_clusters_table(clusters)
+    st.dataframe(
+        clusters_table, hide_index=True, width="stretch", key="clusters_table",
+        on_select=select_cluster_row(clusters_table, "clusters_table"), selection_mode="single-row",
+        column_config={"гипотеза": st.column_config.TextColumn("гипотеза", width="large")},
+    )
+
+    cluster_info = clusters.set_index("cluster_id")
+
+    def _cluster_option_label(cid: int) -> str:
+        if cid not in cluster_info.index:
+            return f"#{cid}"
+        crow = cluster_info.loc[cid]
+        return f"#{cid} — {int(crow['n_nodes'])} узлов, {int(crow['n_seed'])} seed"
+
+    chosen_cluster = st.selectbox(
+        "Показать кластер", cluster_values, key="cluster_gid", format_func=_cluster_option_label,
+    )
+    cid = int(chosen_cluster)
+    cluster_nodes = nodes[nodes["cluster_id"] == cid]
+    crow = cluster_info.loc[cid] if cid in cluster_info.index else None
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Узлов", len(cluster_nodes))
+    m2.metric("Seed", int(cluster_nodes["is_seed"].map(data.bool_value).sum()))
+    m3.metric("Оборот внутри", data.money(crow["sum_kzt_internal"]) if crow is not None else "—")
+
+    st.markdown(
+        f"<div class='aml-legend'>{theme.role_chips_html(cluster_nodes['role'].value_counts())}</div>",
+        unsafe_allow_html=True,
+    )
+    st.info(crow["hypothesis"] if crow is not None else "Гипотеза недоступна")
+
+    graph.render_network(nodes, edges, None, roles, cid, depth)
+
+    st.markdown("##### Топ-узлы кластера")
+    top_in_cluster = cluster_nodes.nlargest(5, "priority_score")
+    if top_in_cluster.empty:
+        st.caption("Нет узлов в кластере")
+    else:
+        for _, ctrow in top_in_cluster.iterrows():
+            cgid = str(ctrow["gid"])
+            with st.container(border=True):
+                c_gid, c_role, c_prio, c_btn = st.columns([2.5, 1.8, 1.5, 1.2])
+                c_gid.markdown(f"`{cgid}`")
+                c_role.markdown(theme.role_badge(str(ctrow["role"])), unsafe_allow_html=True)
+                cpriority = float(ctrow["priority_score"])
+                c_prio.progress(min(max(cpriority, 0.0), 1.0), text=f"{cpriority:.2f}")
+                c_btn.button("Открыть", key=f"cl_open_{cgid}", on_click=open_node, args=(cgid,), width="stretch")
 
 with tab_ai:
-    st.subheader("AI-ассистент по графу")
-    if not (os.getenv("OPENAI_API_KEY") or os.getenv("NVIDIA_API_KEY")):
-        st.info("AI-ассистент выключен: добавьте OPENAI_API_KEY или NVIDIA_API_KEY в .env. Остальные вкладки работают без ключа.")
-    else:
-        from harness.agent import Agent
-        if "graph_agent" not in st.session_state:
-            st.session_state.graph_agent = Agent(session_id=uuid.uuid4().hex[:12], on_event=None)
-            st.session_state.graph_chat = []
-        for message in st.session_state.graph_chat:
-            with st.chat_message(message["role"]):
-                if message.get("steps"):
-                    with st.expander("Шаги агента"):
-                        for step in message["steps"]:
-                            st.code(json.dumps(step, ensure_ascii=False, indent=2)[:4000])
-                st.markdown(message["content"])
-        question = st.chat_input("Например: кто главный консолидатор?")
-        if question:
-            st.session_state.graph_chat.append({"role": "user", "content": question})
-            steps = []
-            def on_event(event):
-                if event.type in {"thinking", "tool_call", "tool_result", "error"}:
-                    steps.append({"type": event.type, **event.data})
-            agent = st.session_state.graph_agent
-            agent.on_event = on_event
-            safety = ("Отвечай только по данным инструментов графа. Каждый вывод называй гипотезой для проверки, "
-                      "указывай gid и никогда не утверждай виновность. Вопрос аналитика: ")
-            try:
-                answer = agent.run(safety + question)
-            except Exception as exc:
-                answer = f"Не удалось получить ответ ассистента: {exc}"
-            st.session_state.graph_chat.append({"role": "assistant", "content": answer, "steps": steps})
-            st.rerun()
+    assistant.render(nodes, top, open_node)
+
+with tab_howto:
+    explain.render_how_it_works(nodes)

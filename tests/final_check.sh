@@ -12,8 +12,8 @@ else
 fi
 TMP_ROOT="${TMPDIR:-/tmp}"
 WORK_DIR=""
-declare -a STEP_NAMES=("Clone origin/main" "Create virtualenv" "Install pipeline requirements" "Run pipeline (<300s)" "Check generated outputs" "Pipeline tests" "UI smoke test" "No .env files" "No tracked secret-like keys")
-declare -a STEP_RESULTS=("PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING")
+declare -a STEP_NAMES=("Clone origin/main" "Create virtualenv" "Install pipeline requirements" "Run pipeline (<300s)" "Check generated outputs" "Pipeline tests" "Role rule tests" "UI smoke test" "No .env files" "No tracked secret-like keys")
+declare -a STEP_RESULTS=("PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING" "PENDING")
 
 record() {
   STEP_RESULTS[$1]="$2"
@@ -68,7 +68,7 @@ fi
 if [[ -z "$REMOTE_URL" ]]; then
   printf 'Could not read the repository origin URL. Set FINAL_CHECK_REMOTE to override it.\n' >&2
   record 0 "❌"
-  for idx in 1 2 3 4 5 6 7 8; do record "$idx" "❌ SKIPPED"; done
+  for idx in 1 2 3 4 5 6 7 8 9; do record "$idx" "❌ SKIPPED"; done
   exit 1
 fi
 
@@ -78,7 +78,7 @@ if git clone --quiet --branch main --single-branch "$REMOTE_URL" "$REPO_DIR"; th
 else
   record 0 "❌"
   printf 'Clone failed for origin main; remaining checks require the clone.\n' >&2
-  for idx in 1 2 3 4 5 6 7 8; do record "$idx" "❌ SKIPPED"; done
+  for idx in 1 2 3 4 5 6 7 8 9; do record "$idx" "❌ SKIPPED"; done
   exit 1
 fi
 
@@ -122,22 +122,28 @@ fi
 
 if [[ "${STEP_RESULTS[2]}" == "✅" ]]; then
   if (cd "$REPO_DIR" && "$VENV_PYTHON" tests/test_pipeline.py); then record 5 "✅"; else record 5 "❌"; fi
-  if (cd "$REPO_DIR" && "$VENV_PYTHON" tests/test_ui_smoke.py); then record 6 "✅"; else record 6 "❌"; fi
+  if [[ "${STEP_RESULTS[3]}" == "✅" ]]; then
+    if (cd "$REPO_DIR" && "$VENV_PYTHON" tests/test_roles.py); then record 6 "✅"; else record 6 "❌"; fi
+  else
+    record 6 "❌ SKIPPED"
+  fi
+  if (cd "$REPO_DIR" && "$VENV_PYTHON" tests/test_ui_smoke.py); then record 7 "✅"; else record 7 "❌"; fi
 else
   record 5 "❌ SKIPPED"
   record 6 "❌ SKIPPED"
+  record 7 "❌ SKIPPED"
 fi
 
 env_file="$(find "$REPO_DIR" -type d \( -name .git -o -name .venv \) -prune -o -type f -name .env -print -quit)"
-if [[ -z "$env_file" ]]; then record 7 "✅"; else record 7 "❌"; fi
+if [[ -z "$env_file" ]]; then record 8 "✅"; else record 8 "❌"; fi
 
 # Split the marker so this checker does not match its own source in a repository scan.
 key_marker='s''k-'
 if (cd "$REPO_DIR" && git grep -I -F -q "$key_marker" HEAD -- >/dev/null 2>&1); then
-  record 8 "❌"
+  record 9 "❌"
 else
   grep_status=$?
-  if [[ "$grep_status" -eq 1 ]]; then record 8 "✅"; else record 8 "❌"; fi
+  if [[ "$grep_status" -eq 1 ]]; then record 9 "✅"; else record 9 "❌"; fi
 fi
 
 exit 0
