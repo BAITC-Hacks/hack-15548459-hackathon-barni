@@ -69,8 +69,7 @@ with st.sidebar:
     cluster_choice = st.selectbox("Кластер", ["Все"] + cluster_values)
     depth = st.radio("Глубина окрестности", [1, 2], horizontal=True)
 
-legend = " ".join(f"<span style='color:{color}'>●</span> {theme.ROLE_LABELS[role]}" for role, color in theme.ROLE_COLORS.items())
-st.markdown(legend + " &nbsp; ◇ seed", unsafe_allow_html=True)
+role_counts_all = nodes["role"].value_counts()
 
 try:
     tab_home, tab_network, tab_top, tab_clusters, tab_ai = st.tabs(
@@ -141,10 +140,14 @@ with tab_network:
     cols[0].metric("Узлов", f"{len(nodes):,}".replace(",", " "))
     cols[1].metric("Seed", int(nodes["is_seed"].map(data.bool_value).sum()))
     cols[2].metric("Оборот", data.money(edges["sum_kzt"].sum()))
-    role_counts = nodes["role"].value_counts()
     cols[3].metric("Ключевых узлов", int(nodes["role"].isin(KEY_ROLES).sum()))
-    cols[4].metric("Координаторов", int(role_counts.get("coordinator", 0)))
+    cols[4].metric("Координаторов", int(role_counts_all.get("coordinator", 0)))
     selected = st.session_state.gid_search.strip() or None
+    if selected:
+        step_word = "шаг" if depth == 1 else "шага"
+        st.subheader(f"Окружение узла {selected} ({depth} {step_word})")
+    else:
+        st.subheader("Схема сети: топ-50 узлов по приоритету")
     if selected and selected not in set(nodes["gid"]):
         st.warning(f"GID {selected} не найден. Проверьте число без пробелов.")
     elif selected:
@@ -152,8 +155,10 @@ with tab_network:
         with col_card:
             card.render_node_card(selected, nodes, edges, where="network")
         with col_graph:
+            st.markdown(theme.legend_html(role_counts_all), unsafe_allow_html=True)
             graph.render_network(nodes, edges, selected, roles, None if cluster_choice == "Все" else int(cluster_choice), depth)
     else:
+        st.markdown(theme.legend_html(role_counts_all), unsafe_allow_html=True)
         graph.render_network(nodes, edges, selected, roles, None if cluster_choice == "Все" else int(cluster_choice), depth)
 
 with tab_top:
@@ -170,6 +175,7 @@ with tab_clusters:
     st.subheader("Кластеры и рабочие гипотезы")
     st.dataframe(clusters, hide_index=True, width="stretch")
     chosen_cluster = st.selectbox("Показать кластер", cluster_values, key="cluster_gid")
+    st.markdown(theme.legend_html(role_counts_all), unsafe_allow_html=True)
     graph.render_network(nodes, edges, None, roles, int(chosen_cluster), depth)
 
 with tab_ai:

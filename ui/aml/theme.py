@@ -46,6 +46,31 @@ def role_badge(role: str) -> str:
     )
 
 
+def role_rgba(role: str, alpha: float = 0.55) -> str:
+    """Цвет роли в rgba() для рёбер графа (полупрозрачный, чтобы читалось направление)."""
+    hex_color = ROLE_COLORS.get(role, "#94a3b8").lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def legend_html(counts) -> str:
+    """Легенда сети: цветные пилюли ролей со счётчиком по всей сети + пояснения формы/толщины.
+
+    ``counts`` — что-то со `.get(role, 0)` (обычно ``nodes["role"].value_counts()``).
+    """
+    get = counts.get if hasattr(counts, "get") else (lambda _role, _default=0: _default)
+    chips = "".join(
+        f"<span class='aml-chip'><span class='aml-dot' style='background:{color}'></span>"
+        f"{ROLE_LABELS[role]} {int(get(role, 0) or 0)}</span>"
+        for role, color in ROLE_COLORS.items()
+    )
+    notes = (
+        "<span class='aml-chip-note'>◆ seed (белая рамка)</span>"
+        "<span class='aml-chip-note'>→ направление денег, толщина = сумма, размер = приоритет</span>"
+    )
+    return f"<div class='aml-legend'>{chips}{notes}</div>"
+
+
 GLOBAL_CSS = (
     "<style>"
     ".block-container{padding-top:2.5rem!important;}"
@@ -59,5 +84,11 @@ GLOBAL_CSS = (
     ".feature-badges{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;}"
     ".feature-badges span{background:#334155;color:#e2e8f0;border-radius:999px;"
     "padding:3px 10px;font-size:0.8rem;white-space:nowrap;cursor:default;}"
+    ".aml-legend{display:flex;flex-wrap:wrap;gap:8px;align-items:center;"
+    "margin:2px 0 10px;font-size:0.82rem;color:#e2e8f0;}"
+    ".aml-chip{display:inline-flex;align-items:center;gap:6px;background:#1e293b;"
+    "border-radius:999px;padding:3px 10px;white-space:nowrap;}"
+    ".aml-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none;}"
+    ".aml-chip-note{color:#94a3b8;white-space:nowrap;}"
     "</style>"
 )
