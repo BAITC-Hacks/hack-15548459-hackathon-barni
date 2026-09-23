@@ -151,17 +151,29 @@ except Exception as exc:
 st.title("🔎 Граф денег")
 st.caption("Роли и связи — аналитические признаки для проверки, а не утверждение о виновности.")
 
+if "gid_search" not in st.session_state:
+    st.session_state.gid_search = ""
+if "top_gid" not in st.session_state:
+    st.session_state.top_gid = ""
+
+
+def reset_selection() -> None:
+    st.session_state.gid_search = ""
+    st.session_state.top_gid = ""
+
+
+def select_top_gid() -> None:
+    if st.session_state.top_gid:
+        st.session_state.gid_search = st.session_state.top_gid
+
 with st.sidebar:
     st.header("Фильтры сети")
     roles = st.multiselect("Роли", list(ROLE_LABELS), default=list(ROLE_LABELS), format_func=lambda x: ROLE_LABELS[x])
     cluster_values = sorted(int(x) for x in nodes["cluster_id"].dropna().unique())
     cluster_choice = st.selectbox("Кластер", ["Все"] + cluster_values)
     depth = st.radio("Глубина окрестности", [1, 2], horizontal=True)
-    gid_input = st.text_input("Найти по GID", value=st.session_state.get("selected_gid", ""), placeholder="100000…").strip()
-    if gid_input:
-        st.session_state.selected_gid = gid_input
-    elif "selected_gid" not in st.session_state:
-        st.session_state.selected_gid = ""
+    st.text_input("Найти по GID", key="gid_search", placeholder="100000…")
+    st.button("Сбросить выбор", on_click=reset_selection, use_container_width=True)
 
 legend = " ".join(f"<span style='color:{color}'>●</span> {ROLE_LABELS[role]}" for role, color in ROLE_COLORS.items())
 st.markdown(legend + " &nbsp; ◇ seed", unsafe_allow_html=True)
@@ -175,7 +187,7 @@ with tab_network:
     cols[2].metric("Оборот", money(edges["sum_kzt"].sum()))
     role_counts = nodes["role"].value_counts()
     cols[3].metric("Роли", " · ".join(f"{ROLE_LABELS.get(k, k)}: {v}" for k, v in role_counts.items()))
-    selected = st.session_state.selected_gid or None
+    selected = st.session_state.gid_search.strip() or None
     if selected and selected not in set(nodes["gid"]):
         st.warning(f"GID {selected} не найден. Проверьте число без пробелов.")
     else:
@@ -186,9 +198,11 @@ with tab_network:
 with tab_top:
     st.subheader("Узлы с наивысшим приоритетом проверки")
     st.dataframe(top, hide_index=True, use_container_width=True)
-    chosen_top = st.selectbox("Открыть карточку", [""] + top["gid"].astype(str).tolist(), key="top_gid")
+    chosen_top = st.selectbox(
+        "Открыть карточку", [""] + top["gid"].astype(str).tolist(),
+        key="top_gid", on_change=select_top_gid,
+    )
     if chosen_top:
-        st.session_state.selected_gid = chosen_top
         node_card(chosen_top, nodes, edges)
 
 with tab_clusters:
