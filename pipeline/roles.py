@@ -23,6 +23,17 @@ def _clip(x):
     return float(min(1.0, max(0.0, x)))
 
 
+WHY_MAX = 300  # why в top_nodes.csv: evidence (≤200) + пояснения, заметки добавляются целиком
+
+
+def _append_fitting(text, notes, limit):
+    """Дописывает заметки через «; » целиком, пока строка не длиннее limit."""
+    for note in notes:
+        if len(text) + 2 + len(note) <= limit:
+            text = f"{text}; {note}"
+    return text
+
+
 def assign(df):
     """Возвращает df с колонками role, role_score, evidence, rule."""
     df = df.copy()
@@ -104,14 +115,7 @@ def assign(df):
                       + ("отдаёт больше полученного: вероятны поступления извне выборки" if not pd.isna(pt) and pt > T["transit_pass_max_fast"]
                          else "удерживает часть средств, признаков роли недостаточно"))
 
-        if len(ev) <= 200:
-            evidence = ev
-            for note in patterns.notes(r):
-                candidate = evidence + "; " + note
-                if len(candidate) <= 200:
-                    evidence = candidate
-        else:
-            evidence = ev[:200]
+        evidence = _append_fitting(ev[:200], patterns.notes(r), 200)
 
         roles.append(role)
         scores.append(round(score, 3))
@@ -150,8 +154,6 @@ def why(r):
         extra.append(f"{r.seeds_2hop} seed в 2 шагах выше")
     if r.fast_share == r.fast_share and r.fast_share >= 0.5 and "дн. после" not in r.evidence:
         extra.append(f"{pct(r.fast_share)} суммы уходит за 2 дня")
-    for note in patterns.notes(r):
-        if note not in r.evidence:
-            extra.append(note)
-    tail = "; ".join(extra)
+    tail = _append_fitting("; ".join(extra), [n for n in patterns.notes(r) if n not in r.evidence],
+                           WHY_MAX - len(r.evidence) - 2)
     return f"{r.evidence}. " + tail[:1].upper() + tail[1:]

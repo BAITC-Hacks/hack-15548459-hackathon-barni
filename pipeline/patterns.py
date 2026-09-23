@@ -12,6 +12,8 @@ def _cycles(G, max_len):
     n_cycles, cycle_kzt = {}, {}
     for cyc in nx.simple_cycles(G, length_bound=max_len):
         k = len(cyc)
+        if k < 2:  # перевод самому себе — не возвратный поток
+            continue
         amt = min(G[cyc[i]][cyc[(i + 1) % k]]["sum_kzt"] for i in range(k))
         for g in cyc:
             n_cycles[g] = n_cycles.get(g, 0) + 1
@@ -67,7 +69,7 @@ def notes(r):
 
     if getattr(r, "split_flag", False):
         out.append(f"дробление: {getattr(r, 'split_days', 0)} дн. по {getattr(r, 'split_max_tx', 0)}+ "
-                   f"перевода одному получателю, 5–10 тыс ₸")
+                   f"перевода одному получателю, {T['split_min_kzt'] / 1e3:g}–{T['split_max_kzt'] / 1e3:g} тыс ₸")
 
     anomaly_z = getattr(r, "anomaly_z", 0.0)
     if anomaly_z >= T["anomaly_z"]:
@@ -76,11 +78,11 @@ def notes(r):
     n_fast_chains = getattr(r, "n_fast_chains", 0)
     if n_fast_chains > 0:
         rep = getattr(r, "fast_chain_repeats", 0)
-        out.append(f"быстрый проброс ≤2 дн.: {n_fast_chains} маршр." + (f", {rep} повторных" if rep else ""))
+        out.append(f"быстрый проброс ≤{T['chain_days']} дн.: {n_fast_chains} маршр." + (f", {rep} повторных" if rep else ""))
 
     n_cycles = getattr(r, "n_cycles", 0)
     if n_cycles > 0:
-        out.append(f"возвратные потоки: {n_cycles} цикл. ≤6 шагов, {kzt(getattr(r, 'cycle_kzt', 0.0))}")
+        out.append(f"возвратные потоки: {n_cycles} цикл. ≤{T['cycle_max_len']} шагов, {kzt(getattr(r, 'cycle_kzt', 0.0))}")
 
     return out
 
