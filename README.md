@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" alt="Hackalem Barni — пиксельный логотип" width="140">
+  <img src="docs/assets/logo.png" alt="Hackalem Barni — пиксельный логотип" height="256" width="256">
 </p>
 
 # Граф денег — аналитика AML-сети
