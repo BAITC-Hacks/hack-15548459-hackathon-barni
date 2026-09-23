@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Стартовый код кейса «GraphALM» — HackAlem AI.
+Стартовый код кейса «GraphAML» — HackAlem AI.
 
 Что он делает:
   1. грузит три parquet-файла и проверяет их консистентность;

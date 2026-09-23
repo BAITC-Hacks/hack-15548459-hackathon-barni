@@ -1,4 +1,4 @@
-"""Русский интерфейс AML-графа: ``streamlit run ui/app.py``."""
+"""Русский интерфейс GraphAML: ``streamlit run ui/app.py``."""
 from __future__ import annotations
 
 import sys
@@ -14,28 +14,34 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 st.set_page_config(
-    layout="wide", page_title="GraphALM — AML", page_icon="🔎", initial_sidebar_state="expanded",
+    layout="wide", page_title="GraphAML", initial_sidebar_state="expanded",
 )
 
 from ui.aml import assistant, card, data, explain, graph, theme  # noqa: E402
 
-TAB_HOME = "🏠 Кого проверять первым"
-TAB_NETWORK = "🕸️ Сеть"
-TAB_TOP = "📋 Топ приоритетов"
-TAB_CLUSTERS = "🧩 Кластеры"
-TAB_AI = "🤖 AI-ассистент"
-TAB_HOWTO = "📘 Как это работает"
+TAB_HOME = "Кого проверить первым"
+TAB_NETWORK = "Сеть"
+TAB_TOP = "Топ приоритетов"
+TAB_CLUSTERS = "Кластеры"
+TAB_AI = "AI-ассистент"
+TAB_HOWTO = "Как это работает"
 TAB_LABELS = [TAB_HOME, TAB_NETWORK, TAB_TOP, TAB_CLUSTERS, TAB_AI, TAB_HOWTO]
 KEY_ROLES = {"coordinator", "consolidator", "distributor"}
 
 try:
     nodes, top, clusters, edges = data.load_data()
-except Exception as exc:
-    st.error(f"Не удалось загрузить данные графа: {exc}")
+except Exception:
+    st.error("Не удалось загрузить данные GraphAML. Проверьте, что сборка пайплайна завершилась и файлы графа доступны.")
+    with st.expander("Что проверить"):
+        st.code("outputs/nodes_roles.csv, outputs/top_nodes.csv, outputs/clusters.csv, data/edges.parquet")
+    st.stop()
+
+if nodes.empty:
+    st.error("В выгрузке нет узлов для анализа. Проверьте входные данные и повторно запустите сборку пайплайна.")
     st.stop()
 
 st.markdown(theme.GLOBAL_CSS, unsafe_allow_html=True)
-st.title("🔎 GraphALM")
+st.title("GraphAML")
 st.caption("Роли и связи — аналитические признаки для проверки, а не утверждение о виновности.")
 
 if "gid_search" not in st.session_state:
@@ -50,21 +56,46 @@ def reset_selection() -> None:
 
 
 def go_network() -> None:
-    """Ввели gid в поиске → сразу показать вкладку с карточкой и графом."""
-    if st.session_state.gid_search.strip():
-        st.session_state.main_tab = TAB_NETWORK
+    """Synchronize the GID selection and show its network when the search changes."""
+    gid = str(st.session_state.gid_search).strip()
+    st.session_state.top_gid = gid if gid in set(top["gid"].astype(str)) else ""
+    if gid:
+        if st.session_state.get("_tabs_switchable", False):
+            st.session_state.main_tab = TAB_NETWORK
 
 
 def select_top_gid() -> None:
-    if st.session_state.top_gid:
-        st.session_state.gid_search = st.session_state.top_gid
+    gid = str(st.session_state.get("top_gid", "")).strip()
+    st.session_state.gid_search = gid
+    if gid:
+        if st.session_state.get("_tabs_switchable", False):
+            st.session_state.main_tab = TAB_NETWORK
+
+
+def select_top_row(key: str = "top_table") -> None:
+    """Open the selected top-table row in the network view and sync both selectors."""
+    state = st.session_state.get(key)
+    rows = getattr(getattr(state, "selection", None), "rows", None) if state is not None else None
+    if rows:
+        idx = rows[0]
+        if 0 <= idx < len(top):
+            gid = str(top.iloc[idx]["gid"])
+            st.session_state.gid_search = gid
+            st.session_state.top_gid = gid
+            if st.session_state.get("_tabs_switchable", False):
+                st.session_state.main_tab = TAB_NETWORK
 
 
 with st.sidebar:
-    st.header("Поиск узла")
-    st.text_input("Найти по GID", key="gid_search", placeholder="100000…", on_change=go_network)
+    logo_path = ROOT / "docs" / "assets" / "logo.png"
+    if logo_path.exists():
+        st.image(str(logo_path), width=76)
+    st.header("GraphAML")
+    st.caption("Рабочая область анализа сети")
+    st.text_input("Найти по GID", key="gid_search", placeholder="Например, 100000", on_change=go_network)
     st.button("Сбросить выбор", on_click=reset_selection, width="stretch")
-    st.header("Фильтры сети")
+    st.divider()
+    st.subheader("Фильтры сети")
     if hasattr(st, "pills"):
         roles = st.pills(
             "Роли", list(theme.ROLE_LABELS), selection_mode="multi",
@@ -91,10 +122,12 @@ try:
 except TypeError:
     tab_home, tab_network, tab_top, tab_clusters, tab_ai, tab_howto = st.tabs(TAB_LABELS)
     tabs_switchable = False
+st.session_state._tabs_switchable = tabs_switchable
 
 
 def open_node(gid: str) -> None:
     st.session_state.gid_search = gid
+    st.session_state.top_gid = gid if gid in set(top["gid"].astype(str)) else ""
     if tabs_switchable:
         st.session_state.main_tab = TAB_NETWORK
     else:
@@ -178,13 +211,17 @@ with tab_network:
 
 with tab_top:
     st.subheader("Узлы с наивысшим приоритетом проверки")
-    st.dataframe(top, hide_index=True, width="stretch")
+    st.dataframe(
+        top, hide_index=True, width="stretch", key="top_table",
+        on_select=select_top_row, selection_mode="single-row",
+    )
     chosen_top = st.selectbox(
         "Открыть карточку", [""] + top["gid"].astype(str).tolist(),
         key="top_gid", on_change=select_top_gid,
     )
     if chosen_top:
         card.render_node_card(chosen_top, nodes, edges, where="top")
+
 
 def select_cluster_row(table: pd.DataFrame, key: str):
     """Колбэк для клика по строке таблицы кластеров: переводит cluster_gid на выбранный кластер."""

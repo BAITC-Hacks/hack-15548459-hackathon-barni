@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -90,10 +91,7 @@ def load_report() -> dict:
 
 @st.cache_data(show_spinner=False)
 def transactions_count() -> int | None:
-    """Число строк ``data/transactions.parquet`` — дёшево, через метаданные pyarrow (без чтения данных).
-
-    ``None``, если файл недоступен или pyarrow не установлен — вызывающий код показывает «—».
-    """
+    """Число строк transactions.parquet по метаданным, если файл и pyarrow доступны."""
     try:
         import pyarrow.parquet as pq
         return int(pq.ParquetFile(TRANSACTIONS_PATH).metadata.num_rows)
@@ -102,7 +100,7 @@ def transactions_count() -> int | None:
 
 
 def format_clusters_table(clusters: pd.DataFrame) -> pd.DataFrame:
-    """Таблица кластеров для ``st.dataframe``: русские колонки, ``top_gids`` скрыт, сортировка по числу узлов."""
+    """Таблица кластеров для интерфейса с русскими заголовками и сортировкой по размеру."""
     table = clusters.sort_values("n_nodes", ascending=False).reset_index(drop=True)
     return pd.DataFrame({
         "№ кластера": table["cluster_id"],
@@ -116,11 +114,16 @@ def format_clusters_table(clusters: pd.DataFrame) -> pd.DataFrame:
 def money(value: object) -> str:
     try:
         amount = float(value)
-        if amount != amount:  # NaN
+        if not math.isfinite(amount):
             return "—"
-        if abs(amount) >= 1_000_000:
+        magnitude = abs(amount)
+        if magnitude >= 1_000_000_000_000:
+            return f"{amount / 1_000_000_000_000:.1f}".replace(".", ",") + " трлн ₸"
+        if magnitude >= 1_000_000_000:
+            return f"{amount / 1_000_000_000:.1f}".replace(".", ",") + " млрд ₸"
+        if magnitude >= 1_000_000:
             return f"{amount / 1_000_000:.1f}".replace(".", ",") + " млн ₸"
-        if abs(amount) >= 1_000:
+        if magnitude >= 1_000:
             return f"{amount / 1_000:.0f}".replace(".", ",") + " тыс ₸"
         return f"{amount:,.0f} ₸".replace(",", " ")
     except (TypeError, ValueError):
@@ -133,7 +136,12 @@ def bool_value(value: object) -> bool:
 
 def short_why(why: object, limit: int = 140) -> str:
     """Первая фраза/предложение из ``why`` (top_nodes.csv), обрезанная до ``limit`` символов."""
-    text = str(why or "").strip()
+    try:
+        if pd.isna(why):
+            return "—"
+    except (TypeError, ValueError):
+        pass
+    text = str(why).strip()
     if not text:
         return "—"
     clause = re.split(r"[;.]", text, maxsplit=1)[0].strip()
@@ -150,3 +158,4 @@ def neighborhood(edges: pd.DataFrame, gid: str, depth: int) -> set[str]:
         frontier = nxt - chosen
         chosen |= nxt
     return chosen
+

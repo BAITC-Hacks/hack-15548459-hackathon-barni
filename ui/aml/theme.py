@@ -1,5 +1,7 @@
-"""Цвета ролей, русские подписи и общий CSS для интерфейса «GraphALM»."""
+"""Цвета ролей, пояснения правил и тема интерфейса GraphAML."""
 from __future__ import annotations
+
+from html import escape
 
 ROLE_LABELS = {
     "coordinator": "Координатор", "consolidator": "Консолидатор",
@@ -37,12 +39,12 @@ RULE_TEXT = {
 
 
 def role_badge(role: str) -> str:
-    """HTML-пилюля с цветом роли и русской подписью (для ``st.markdown(unsafe_allow_html=True)``)."""
-    color = ROLE_COLORS.get(role, "#6B7280")
-    label = ROLE_LABELS.get(role, role)
+    """Нейтральный бейдж роли с цветным индикатором и доступным текстом."""
+    color = ROLE_COLORS.get(role, ROLE_COLORS["peripheral"])
+    label = escape(ROLE_LABELS.get(role, role))
     return (
-        f"<span style='background:{color};color:#ffffff;border-radius:999px;"
-        f"padding:2px 10px;font-size:0.8rem;white-space:nowrap;'>{label}</span>"
+        f"<span class='role-badge' style='--role-color:{color}'>"
+        f"<span class='role-badge__dot' aria-hidden='true'></span>{label}</span>"
     )
 
 
@@ -54,10 +56,7 @@ def role_rgba(role: str, alpha: float = 0.55) -> str:
 
 
 def role_chips_html(counts) -> str:
-    """Цветные пилюли ролей со счётчиком (без пояснений — для легенды и карточки кластера).
-
-    ``counts`` — что-то со `.get(role, 0)` (обычно ``nodes["role"].value_counts()``).
-    """
+    """Пилюли ролей со счётчиками для легенды и карточки кластера."""
     get = counts.get if hasattr(counts, "get") else (lambda _role, _default=0: _default)
     return "".join(
         f"<span class='aml-chip'><span class='aml-dot' style='background:{color}'></span>"
@@ -67,7 +66,7 @@ def role_chips_html(counts) -> str:
 
 
 def legend_html(counts) -> str:
-    """Легенда сети: цветные пилюли ролей со счётчиком по всей сети + пояснения формы/толщины."""
+    """Легенда сети с количеством ролей и краткой подсказкой о кодировании графа."""
     notes = (
         "<span class='aml-chip-note'>◆ seed (белая рамка)</span>"
         "<span class='aml-chip-note'>→ направление денег, толщина = сумма, размер = приоритет</span>"
@@ -75,36 +74,96 @@ def legend_html(counts) -> str:
     return f"<div class='aml-legend'>{role_chips_html(counts)}{notes}</div>"
 
 
-GLOBAL_CSS = (
-    "<style>"
-    ".block-container{padding-top:2.5rem!important;}"
-    "div[data-testid='stIFrame'],div[data-testid='stIFrame'] iframe{"
-    "background:#0b1120!important;border:0!important;}"
-    "div[data-testid='stMetricValue']{"
-    "white-space:normal!important;overflow:visible!important;"
-    "text-overflow:clip!important;font-size:1.3rem!important;line-height:1.3!important;}"
-    "[data-testid='stMetricLabel'],[data-testid='stMetricLabel'] *{"
-    "white-space:normal!important;overflow:visible!important;text-overflow:clip!important;}"
-    ".feature-badges{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;}"
-    ".feature-badges span{background:#334155;color:#e2e8f0;border-radius:999px;"
-    "padding:3px 10px;font-size:0.8rem;white-space:nowrap;cursor:default;}"
-    ".aml-legend{display:flex;flex-wrap:wrap;gap:8px;align-items:center;"
-    "margin:2px 0 10px;font-size:0.82rem;color:#e2e8f0;}"
-    ".aml-chip{display:inline-flex;align-items:center;gap:6px;background:#1e293b;"
-    "border-radius:999px;padding:3px 10px;white-space:nowrap;}"
-    ".aml-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none;}"
-    ".aml-chip-note{color:#94a3b8;white-space:nowrap;}"
-    ".aml-flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:6px 0 16px;}"
-    ".aml-flow-box{flex:1 1 200px;min-width:170px;background:#1e293b;color:#e2e8f0;"
-    "border-radius:10px;padding:10px 14px;font-size:0.82rem;line-height:1.4;}"
-    ".aml-flow-box b{color:#f8fafc;}"
-    ".aml-flow-arrow{display:flex;align-items:center;justify-content:center;"
-    "color:#94a3b8;font-size:1.3rem;font-weight:700;flex:0 0 auto;padding:0 2px;}"
-    ".aml-roles-table{width:100%;border-collapse:collapse;font-size:0.82rem;color:#e2e8f0;"
-    "background:#0f172a;border-radius:8px;overflow:hidden;}"
-    ".aml-roles-table th,.aml-roles-table td{padding:6px 10px;border-bottom:1px solid #334155;"
-    "text-align:left;vertical-align:top;}"
-    ".aml-roles-table th{color:#94a3b8;font-weight:600;white-space:nowrap;}"
-    ".aml-mono{font-family:monospace;white-space:nowrap;}"
-    "</style>"
-)
+GLOBAL_CSS = """
+<style>
+:root {
+  color-scheme: dark;
+  --aml-bg: #0b1018;
+  --aml-surface: #111a26;
+  --aml-surface-raised: #172231;
+  --aml-border: #29384a;
+  --aml-text: #e8eef6;
+  --aml-muted: #b3c0ce;
+  --aml-accent: #3e9ef7;
+}
+.stApp { background: var(--aml-bg); color: var(--aml-text); }
+.block-container { max-width: 1500px; padding-top: 4.25rem !important; padding-bottom: 3rem; }
+[data-testid="stSidebar"] { background: #0e1621; border-right: 1px solid var(--aml-border); }
+[data-testid="stHeader"] { background: rgba(11, 16, 24, .92); }
+h1, h2, h3, h4 { color: #f4f7fb; letter-spacing: -.02em; overflow: visible; }
+h1 { line-height: 1.2 !important; padding-bottom: .08em; }
+p, li, label, [data-testid="stCaptionContainer"] { color: var(--aml-muted); }
+[data-testid="stMetric"] {
+  background: var(--aml-surface); border: 1px solid var(--aml-border);
+  border-radius: 12px; padding: 14px 16px;
+}
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {
+  color: #b8c5d4; white-space: normal !important; overflow: visible !important;
+  text-overflow: clip !important; font-size: .9rem !important; line-height: 1.35 !important;
+}
+[data-testid="stMetricValue"] {
+  color: #f4f7fb; white-space: normal !important; overflow: visible !important;
+  text-overflow: clip !important; font-size: 1.3rem !important; line-height: 1.3 !important;
+  font-variant-numeric: tabular-nums;
+}
+[data-testid="stTabs"] [data-baseweb="tab-list"] { gap: 8px; border-bottom: 1px solid var(--aml-border); }
+[data-testid="stTabs"] button[role="tab"] {
+  min-height: 44px; color: #b8c5d4; border-radius: 8px 8px 0 0;
+}
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+  color: #f4f7fb; border-bottom: 2px solid var(--aml-accent);
+}
+[data-testid="stTabs"] button[role="tab"]:focus-visible,
+button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid #75bdff !important; outline-offset: 2px;
+}
+div[data-testid="stIFrame"], div[data-testid="stIFrame"] iframe {
+  background: var(--aml-bg) !important; border: 1px solid var(--aml-border) !important;
+  border-radius: 12px;
+}
+[data-testid="stDataFrame"] { border: 1px solid var(--aml-border); border-radius: 10px; }
+[data-testid="stVerticalBlockBorderWrapper"] {
+  border-color: var(--aml-border) !important; background: var(--aml-surface);
+  border-radius: 12px;
+}
+div.stButton > button {
+  min-height: 42px; border-radius: 8px; border: 1px solid #3a4a5f;
+  background: #172231; color: #eef4fb; transition: background-color 120ms ease, border-color 120ms ease;
+}
+div.stButton > button:hover { border-color: #75bdff; background: #1c2b3d; color: #fff; }
+div.stButton > button[kind="primary"] { background: #1d67a5; border-color: #378fda; color: #fff; }
+[data-testid="stTextInput"] input, [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+[data-testid="stMultiSelect"] [data-baseweb="select"] > div {
+  background-color: #121d2a; border-color: #34465a; color: #edf3fa;
+}
+[data-testid="stProgressBar"] > div > div { background: var(--aml-accent); }
+.role-badge {
+  display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px;
+  color: #edf3fa; background: #182332; border: 1px solid var(--role-color);
+  border-radius: 999px; font-size: .82rem; line-height: 1.25; white-space: nowrap;
+}
+.role-badge__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--role-color); flex: 0 0 auto; }
+.feature-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.feature-badges span { background: #243449; color: #e8eef6; border: 1px solid #3b5068; border-radius: 999px; padding: 3px 10px; font-size: .8rem; white-space: nowrap; }
+.aml-legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 2px 0 10px; font-size: .82rem; color: #e2e8f0; }
+.aml-chip { display: inline-flex; align-items: center; gap: 6px; background: #182332; border: 1px solid #34465a; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.aml-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.aml-chip-note { color: #b3c0ce; white-space: normal; }
+.aml-flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin: 6px 0 16px; }
+.aml-flow-box { flex: 1 1 200px; min-width: 170px; background: #182332; color: #e2e8f0; border: 1px solid #34465a; border-radius: 10px; padding: 10px 14px; font-size: .82rem; line-height: 1.45; }
+.aml-flow-box b { color: #f8fafc; }
+.aml-flow-arrow { display: flex; align-items: center; justify-content: center; color: #b3c0ce; font-size: 1.3rem; font-weight: 700; flex: 0 0 auto; padding: 0 2px; }
+.aml-roles-table { width: 100%; border-collapse: collapse; font-size: .82rem; color: #e2e8f0; background: #0f172a; border-radius: 8px; overflow: hidden; }
+.aml-roles-table th, .aml-roles-table td { padding: 6px 10px; border-bottom: 1px solid #34465a; text-align: left; vertical-align: top; }
+.aml-roles-table th { color: #b3c0ce; font-weight: 600; white-space: nowrap; }
+.aml-mono { font-family: monospace; white-space: nowrap; }
+@media (max-width: 720px) {
+  .block-container { padding: 4.25rem 1rem 2rem !important; }
+  [data-testid="stTabs"] [data-baseweb="tab-list"] { gap: 2px; overflow-x: auto; }
+  [data-testid="stTabs"] button[role="tab"] { padding-inline: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+</style>
+"""

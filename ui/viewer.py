@@ -1,6 +1,5 @@
-"""Экран схемы сети: GraphALM (pyvis) + поиск узла + карточка + топ/кластеры.
+"""Экран GraphAML: сеть + поиск узла + карточка + топ/кластеры.
 Запуск: streamlit run ui/viewer.py"""
-import math
 import sys
 from pathlib import Path
 
@@ -10,19 +9,17 @@ sys.path.insert(0, str(ROOT))
 import networkx as nx  # noqa: E402
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
-from pyvis.network import Network  # noqa: E402
 import streamlit.components.v1 as components  # noqa: E402
 
-from pipeline.cards import node_card, init as cards_init  # noqa: E402
+from pipeline.cards import init as cards_init  # noqa: E402
 from pipeline.clusters import RU  # noqa: E402
 from pipeline.metrics import build_graph  # noqa: E402
-from pipeline.roles import kzt  # noqa: E402
+from ui.aml.card import render_node_card  # noqa: E402
+from ui.aml.graph import graph_html  # noqa: E402
+from ui.aml.theme import GLOBAL_CSS, ROLE_COLORS  # noqa: E402
 
 # ── палитра ролей ────────────────────────────────────────────────────────────
-COLORS = {
-    "coordinator": "#e74c3c", "consolidator": "#e67e22", "distributor": "#9b59b6",
-    "transit": "#3498db", "terminal": "#2ecc71", "peripheral": "#95a5a6",
-}
+COLORS = ROLE_COLORS
 MAX_NODES = 300
 DEFAULT_TOP_N = 50
 
@@ -64,13 +61,17 @@ def parse_gid(text):
 
 def cap_by_priority(gids, df, keep, cap=MAX_NODES):
     """Обрезает список gid до cap штук по приоритету (ties gid asc), но всегда оставляет keep."""
-    keep = set(keep)
     sub = df[df.gid.isin(gids)].sort_values(["priority_score", "gid"], ascending=[False, True])
     ordered = sub.gid.tolist()
     if len(ordered) <= cap:
         return set(ordered), False
-    head = set(ordered[:cap]) | keep
-    return head, len(head) < len(ordered)
+    keep_set = set(keep)
+    keep_ordered = [gid for gid in ordered if gid in keep_set]
+    # Reserve room for selected/context nodes instead of adding them after a full cap.
+    preserved = keep_ordered[:cap]
+    preserved_set = set(preserved)
+    head = preserved + [gid for gid in ordered if gid not in preserved_set][:cap - len(preserved)]
+    return set(head), len(head) < len(ordered)
 
 
 def neighborhood(G, gid, radius):
@@ -83,52 +84,21 @@ def neighborhood(G, gid, radius):
 
 
 def make_graph_html(gids, df, edges, selected_gid=None, height_px=650):
-    """Строит pyvis-граф по набору gid: направленные рёбра, цвет по роли, размер по приоритету."""
+    """Строит общий тёмный граф, сохраняя целочисленные gid пайплайна."""
     sub = df[df.gid.isin(gids)]
     if sub.empty:
-        return "<p>Нет узлов для отображения.</p>"
-    gid_set = set(sub.gid)
-    e = edges[edges.src.isin(gid_set) & edges.dst.isin(gid_set)]
-    max_sum = float(e.sum_kzt.max()) if not e.empty else 1.0
-
-    net = Network(height=f"{height_px}px", width="100%", directed=True, cdn_resources="in_line",
-                  bgcolor="#ffffff", font_color="#222222")
-    net.barnes_hut(gravity=-8000, central_gravity=0.3, spring_length=120, damping=0.9)
-    net.set_options('{"physics": {"stabilization": {"iterations": 120}}}')
-
-    for r in sub.itertuples():
-        nid = str(r.gid)
-        color = COLORS.get(r.role, COLORS["peripheral"])
-        size = 10 + 30 * float(r.priority_score)
-        title = "\n".join([
-            f"gid: {r.gid}",
-            f"роль: {RU.get(r.role, r.role)} ({r.rule})",
-            f"приоритет: {r.priority_score:.2f}",
-            f"{r.evidence}",
-        ])
-        border_w = 1
-        shape = "dot"
-        if bool(r.is_seed):
-            border_w = 4
-            shape = "star"
-            color = {"background": color, "border": "#f1c40f"}
-        if r.gid == selected_gid:  # выбранный узел: чёрная рамка (seed остаётся звездой)
-            border_w = 5
-            color = {"background": color["background"] if isinstance(color, dict) else color,
-                     "border": "#000000"}
-        net.add_node(nid, label=str(r.gid)[-6:], title=title, color=color, size=size,
-                     borderWidth=border_w, shape=shape)
-
-    for r in e.itertuples():
-        w = 1 + 6 * math.log1p(r.sum_kzt) / math.log1p(max_sum) if max_sum > 0 else 1
-        title = f"{kzt(r.sum_kzt)}, {r.n_tx} переводов"
-        net.add_edge(str(r.src), str(r.dst), value=w, title=title, arrows="to")
-
-    return net.generate_html()
+        return "<p>После фильтрации не осталось узлов.</p>"
+    nodes = sub.copy()
+    nodes["gid"] = nodes["gid"].astype(str)
+    edge_rows = edges.copy()
+    edge_rows["src"] = edge_rows["src"].astype(str)
+    edge_rows["dst"] = edge_rows["dst"].astype(str)
+    return graph_html(nodes, edge_rows, None if selected_gid is None else str(selected_gid))
 
 
 # ── страница ──────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="GraphALM", page_icon="🕸️", layout="wide")
+st.set_page_config(page_title="GraphAML", layout="wide")
+st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 loaded = load_data()
 if loaded is None:
@@ -163,7 +133,8 @@ def on_top_select():
     if rows:
         select_gid(int(top_df.iloc[rows[0]].gid))
 
-st.title("GraphALM — схема сети")
+st.title("GraphAML")
+st.subheader("Схема сети")
 st.caption("Роли — гипотезы для проверки, а не обвинения.")
 
 # ── сайдбар: поиск + фильтры ──────────────────────────────────────────────────
@@ -175,7 +146,7 @@ with st.sidebar:
             f'border-radius:50%;margin-right:6px;"></span>{RU.get(role, role)}',
             unsafe_allow_html=True,
         )
-    st.caption("★ с жёлтой рамкой — seed; чёрная рамка — выбранный узел; "
+    st.caption("Ромб с белой рамкой — seed; светлый узел — выбранный узел; "
                "стрелка — направление денег, толщина — сумма, размер — приоритет.")
     st.divider()
 
@@ -212,6 +183,25 @@ def apply_filters(base_df, keep_gid=None):
     return filtered
 
 
+def display_frame(frame, labels):
+    """Локализует известные названия столбцов и роли, не меняя исходные данные."""
+    shown = frame.copy()
+    if "role" in shown.columns:
+        shown["role"] = shown["role"].map(lambda role: RU.get(role, role))
+    shown = shown.rename(columns={name: labels[name] for name in shown.columns if name in labels})
+    return shown
+
+
+TABLE_LABELS = {
+    "gid": "GID", "role": "Роль", "priority_score": "Приоритет",
+    "role_score": "Оценка роли", "evidence": "Признаки", "why": "Обоснование",
+    "cluster_id": "Кластер", "depth": "Колено", "in_kzt": "Получено",
+    "out_kzt": "Отправлено", "in_deg": "Плательщиков", "out_deg": "Получателей",
+    "sum_kzt": "Сумма, ₸", "n_tx": "Переводов", "size": "Узлов",
+    "top_gids": "Топ GID",
+}
+
+
 def render_card_and_graph(gid, radius_hops, key_suffix=""):
     """Рисует карточку узла + граф его окрестности. Общий блок для нескольких вкладок."""
     if gid is None:
@@ -222,64 +212,23 @@ def render_card_and_graph(gid, radius_hops, key_suffix=""):
         return
 
     row = df.loc[df.gid == gid].iloc[0]
-    st.markdown(node_card(gid))
-
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Роль", RU.get(row.role, row.role))
-    c2.metric("Приоритет", f"{row.priority_score:.2f}")
-    c3.metric("Получено", kzt(row.in_kzt))
-    c4.metric("Отдано", kzt(row.out_kzt))
-    c5.metric("Колено", int(row.depth))
-    c6.metric("Кластер", int(row.cluster_id))
-
-    badges = []
-    if row.get("n_cycles", 0) and row.n_cycles > 0:
-        badges.append(f"🔁 циклы: {int(row.n_cycles)}")
-    if row.get("n_fast_chains", 0) and row.n_fast_chains > 0:
-        badges.append(f"⚡ быстрый проброс: {int(row.n_fast_chains)}")
-    if row.get("split_flag", False):
-        badges.append("✂️ дробление")
-    if row.get("anomaly_z", 0) and row.anomaly_z >= 3:
-        badges.append(f"📈 аномалия z={row.anomaly_z:.1f}")
-    if badges:
-        chips = " ".join(
-            f'<span style="background:#eef2f7;border-radius:12px;padding:3px 10px;margin-right:6px;'
-            f'font-size:0.85em;">{b}</span>' for b in badges
-        )
-        st.markdown(chips, unsafe_allow_html=True)
-
-    if bool(row.truncated):
-        st.warning("Обрыв выгрузки на 4-м колене: исходящие не выгружены — это не конечный получатель, "
-                    "нужна доп. выгрузка")
-
-    payers = edges_df[edges_df.dst == gid].merge(
-        df[["gid", "role"]], left_on="src", right_on="gid", how="left"
-    )[["src", "role", "sum_kzt", "n_tx"]].rename(columns={"src": "gid", "role": "роль",
-                                                            "sum_kzt": "сумма", "n_tx": "переводов"})
-    payers = payers.sort_values("сумма", ascending=False)
-    payers["gid"] = payers["gid"].astype(str)
-    receivers = edges_df[edges_df.src == gid].merge(
-        df[["gid", "role"]], left_on="dst", right_on="gid", how="left"
-    )[["dst", "role", "sum_kzt", "n_tx"]].rename(columns={"dst": "gid", "role": "роль",
-                                                            "sum_kzt": "сумма", "n_tx": "переводов"})
-    receivers = receivers.sort_values("сумма", ascending=False)
-    receivers["gid"] = receivers["gid"].astype(str)
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.markdown("**От кого получил**")
-        st.dataframe(payers, hide_index=True, use_container_width=True)
-    with col_b:
-        st.markdown("**Кому отправил**")
-        st.dataframe(receivers, hide_index=True, use_container_width=True)
+    st.caption(f"Выбранный узел · GID {gid} · {RU.get(row.role, row.role)} · кластер {int(row.cluster_id)}")
+    ui_nodes = df.copy()
+    ui_nodes["gid"] = ui_nodes["gid"].astype(str)
+    ui_edges = edges_df.copy()
+    ui_edges["src"] = ui_edges["src"].astype(str)
+    ui_edges["dst"] = ui_edges["dst"].astype(str)
+    render_node_card(str(gid), ui_nodes, ui_edges, where=f"legacy_{key_suffix or 'graph'}")
 
     nb = neighborhood(G, gid, radius_hops) | {gid}
     nb = set(apply_filters(df, keep_gid=gid).gid) & nb | {gid}
     shown, truncated = cap_by_priority(nb, df, keep={gid})
     if truncated:
-        st.caption(f"Окрестность обрезана до {MAX_NODES} узлов по приоритету.")
+        st.caption(f"Окрестность: показано {len(shown)} из {len(nb)} узлов; лимит {MAX_NODES}, узел {gid} сохранён.")
+    else:
+        st.caption(f"Окрестность узла: {len(shown)} узлов · радиус {radius_hops}")
     html = make_graph_html(shown, df, edges_df, selected_gid=gid)
-    components.html(html, height=650, scrolling=False)
+    components.html(html, height=680, scrolling=False)
 
 
 tab_graph, tab_top, tab_clusters = st.tabs(["Схема сети", "Топ приоритетов", "Кластеры"])
@@ -293,33 +242,38 @@ with tab_graph:
         top_gids = (filtered.sort_values(["priority_score", "gid"], ascending=[False, True])
                     .head(DEFAULT_TOP_N).gid.tolist())
         shown, truncated = cap_by_priority(set(top_gids), df, keep=set())
-        if truncated:
-            st.caption(f"Вид обрезан до {MAX_NODES} узлов по приоритету.")
-        html = make_graph_html(shown, df, edges_df)
-        components.html(html, height=650, scrolling=False)
-        st.caption(f"Показаны топ-{DEFAULT_TOP_N} узлов по приоритету (с учётом фильтров). "
-                   "Выберите узел через поиск слева, чтобы увидеть карточку.")
+        if not shown:
+            st.info("По выбранным фильтрам узлы не найдены. Измените роль, кластер или колено.")
+        else:
+            if truncated:
+                st.caption(f"Схема: показано {len(shown)} из {len(top_gids)} узлов; лимит {MAX_NODES}.")
+            else:
+                st.caption(f"Показаны {len(shown)} узлов из топа по приоритету с учётом фильтров.")
+            components.html(make_graph_html(shown, df, edges_df), height=680, scrolling=False)
+            st.caption("Выберите узел поиском слева или строку в таблице топа, чтобы открыть карточку.")
 
 with tab_top:
     st.subheader("Топ приоритетов")
     display_top = top_df.copy()
     display_top["gid"] = display_top["gid"].astype(str)
-    st.dataframe(display_top, hide_index=True, use_container_width=True,
+    st.dataframe(display_frame(display_top, TABLE_LABELS), hide_index=True, use_container_width=True,
                  on_select=on_top_select, selection_mode="single-row", key="top_table")
     st.divider()
     render_card_and_graph(st.session_state.get("gid"), radius, key_suffix="top")
 
 with tab_clusters:
     st.subheader("Кластеры")
-    st.dataframe(clusters_df, hide_index=True, use_container_width=True)
+    st.dataframe(display_frame(clusters_df, TABLE_LABELS), hide_index=True, use_container_width=True)
     st.divider()
     cid = st.selectbox("Кластер", options=sorted(clusters_df.cluster_id.unique()))
     cluster_gids = set(df[df.cluster_id == cid].gid)
     shown, truncated = cap_by_priority(cluster_gids, df, keep=set())
-    if truncated:
-        st.caption(f"Кластер обрезан до {MAX_NODES} узлов по приоритету.")
-    html = make_graph_html(shown, df, edges_df)
-    components.html(html, height=650, scrolling=False)
+    if not shown:
+        st.info("В этом кластере нет узлов для отображения.")
+    else:
+        if truncated:
+            st.caption(f"Кластер: показано {len(shown)} из {len(cluster_gids)} узлов; лимит {MAX_NODES}.")
+        components.html(make_graph_html(shown, df, edges_df), height=680, scrolling=False)
     top_gids_row = clusters_df.loc[clusters_df.cluster_id == cid, "top_gids"].iloc[0]
     cl_top = [int(g) for g in str(top_gids_row).split(";") if g.strip()]
     st.markdown("**Топ gid кластера:** " + ", ".join(map(str, cl_top)))
@@ -327,3 +281,4 @@ with tab_clusters:
         pick = st.selectbox("Узел кластера", options=cl_top, format_func=str, key="cluster_pick")
         st.button("Показать карточку узла", on_click=select_gid, args=(pick,))
         st.caption("Карточка откроется во вкладках «Схема сети» и «Топ приоритетов».")
+
