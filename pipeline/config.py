@@ -40,6 +40,14 @@ THRESHOLDS = {
 
     "louvain_seed": 42,
     "top_n": 30,
+
+    # паттерны (patterns.py)
+    "cycle_max_len": 6,
+    "chain_days": 2,
+    "split_min_tx": 2,
+    "split_min_kzt": 5000,
+    "split_max_kzt": 10000,
+    "anomaly_z": 3.0,
 }
 
 ROLES = ["consolidator", "transit", "distributor", "terminal", "coordinator", "peripheral"]

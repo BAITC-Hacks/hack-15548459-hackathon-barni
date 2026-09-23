@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from pipeline import clusters, metrics, report, roles
+from pipeline import clusters, metrics, patterns, report, roles
 from pipeline.config import THRESHOLDS as T
 
 REQUIRED = ["gid", "role", "role_score", "cluster_id", "priority_score", "evidence"]
@@ -26,6 +26,8 @@ def main():
 
     edges, nodes, tx = metrics.load(data)
     G, df = metrics.compute(edges, nodes, tx)
+    df = patterns.compute(G, df, tx)
+    df = df.round({"pagerank": 10, "betweenness": 10, "pass_through": 6, "fast_share": 6})
     df = roles.assign(df)
     df = roles.priority(df)
     cmap = clusters.build(G)
@@ -34,7 +36,8 @@ def main():
     # 1. nodes_roles.csv — обязательные колонки + метрики для объяснения
     extra = ["rule", "depth", "is_seed", "in_deg", "out_deg", "in_kzt", "out_kzt", "in_tx", "out_tx",
              "pass_through", "fast_share", "seed_payers", "seeds_2hop", "pagerank", "betweenness",
-             "max_payers_same_day", "truncated"]
+             "max_payers_same_day", "truncated",
+             "n_cycles", "cycle_kzt", "n_fast_chains", "split_flag", "anomaly_z"]
     df.sort_values("gid")[REQUIRED + extra].to_csv(out / "nodes_roles.csv", index=False)
 
     # 2. clusters.csv
