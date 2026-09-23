@@ -1,5 +1,31 @@
+# Единый список для всего проекта: pip install -r requirements-pipeline.txt
+
+# Пайплайн (python run_pipeline.py)
 pandas>=2.0
 pyarrow>=14.0
 networkx>=3.1
 numpy>=1.24
 scipy>=1.11
+
+# Интерфейс (streamlit run ui/app.py)
+streamlit>=1.30
+pyvis>=0.3
+plotly>=5.18
+matplotlib>=3.7
+
+# AI-ассистент: харнес и API
+openai>=1.50
+httpx>=0.27
+python-dotenv>=1.0
+pydantic>=2
+fastapi
+uvicorn[standard]
+python-multipart
+requests
+
+# Инструменты харнеса (чтение файлов, поиск)
+openpyxl
+pypdf
+python-docx
+beautifulsoup4
+ddgs
