@@ -281,4 +281,3 @@ with tab_clusters:
         pick = st.selectbox("Узел кластера", options=cl_top, format_func=str, key="cluster_pick")
         st.button("Показать карточку узла", on_click=select_gid, args=(pick,))
         st.caption("Карточка откроется во вкладках «Схема сети» и «Топ приоритетов».")
-

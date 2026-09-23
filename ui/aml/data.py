@@ -158,4 +158,3 @@ def neighborhood(edges: pd.DataFrame, gid: str, depth: int) -> set[str]:
         frontier = nxt - chosen
         chosen |= nxt
     return chosen
-
