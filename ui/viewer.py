@@ -1,4 +1,4 @@
-"""Экран схемы сети: граф денег (pyvis) + поиск узла + карточка + топ/кластеры.
+"""Экран схемы сети: GraphALM (pyvis) + поиск узла + карточка + топ/кластеры.
 Запуск: streamlit run ui/viewer.py"""
 import math
 import sys
@@ -128,7 +128,7 @@ def make_graph_html(gids, df, edges, selected_gid=None, height_px=650):
 
 
 # ── страница ──────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Граф денег", page_icon="🕸️", layout="wide")
+st.set_page_config(page_title="GraphALM", page_icon="🕸️", layout="wide")
 
 loaded = load_data()
 if loaded is None:
@@ -163,7 +163,7 @@ def on_top_select():
     if rows:
         select_gid(int(top_df.iloc[rows[0]].gid))
 
-st.title("Граф денег — схема сети")
+st.title("GraphALM — схема сети")
 st.caption("Роли — гипотезы для проверки, а не обвинения.")
 
 # ── сайдбар: поиск + фильтры ──────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Граф денег: одна команда от сырых .parquet до выгрузок.
+"""GraphALM: одна команда от сырых .parquet до выгрузок.
 
     python run_pipeline.py                     # data/ → outputs/
     python run_pipeline.py --data путь --out путь
