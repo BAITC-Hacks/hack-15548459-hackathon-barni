@@ -1,4 +1,4 @@
-"""Цвета ролей, русские подписи и общий CSS для интерфейса «GraphALM»."""
+"""Цвета ролей, русские подписи и общий CSS для интерфейса «GraphAML»."""
 from __future__ import annotations
 
 ROLE_LABELS = {

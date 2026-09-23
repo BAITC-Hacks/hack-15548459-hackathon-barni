@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 st.set_page_config(
-    layout="wide", page_title="GraphALM — AML", page_icon="🔎", initial_sidebar_state="expanded",
+    layout="wide", page_title="GraphAML — AML", page_icon="🔎", initial_sidebar_state="expanded",
 )
 
 from ui.aml import assistant, card, data, explain, graph, theme  # noqa: E402
@@ -35,7 +35,7 @@ except Exception as exc:
     st.stop()
 
 st.markdown(theme.GLOBAL_CSS, unsafe_allow_html=True)
-st.title("🔎 GraphALM")
+st.title("🔎 GraphAML")
 st.caption("Роли и связи — аналитические признаки для проверки, а не утверждение о виновности.")
 
 if "gid_search" not in st.session_state:

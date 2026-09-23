@@ -2,7 +2,7 @@
   <img src="docs/assets/logo.png" alt="Hackathon Barni — пиксельный логотип" height="256" width="256">
 </p>
 
-# GraphALM — аналитика AML-сети
+# GraphAML — аналитика AML-сети
 
 **Проект команды Hackathon Barni.**
 
