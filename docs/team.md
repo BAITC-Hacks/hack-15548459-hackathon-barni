@@ -6,7 +6,7 @@
 |---|---|---|---|
 | Ядро и данные | [имя] | `core` | `case/case.md`, `harness/tools/data_*.py`, данные в `workspace/`, слияние веток в `main` |
 | Логика кейса | [имя] | `logic` | `harness/tools/<кейс>_*.py` — главные инструменты анализа |
-| Демо и питч | Арлан | `demo` | `ui/app.py`, `docs/pitch.md`, `docs/demo.md` |
+| Демо и питч | Арлан | `demo` | `ui/app.py`, `docs/jury-cheatsheet.md` |
 
 Правила:
 - Коммит каждые 20–30 минут.
