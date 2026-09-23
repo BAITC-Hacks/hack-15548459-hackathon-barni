@@ -58,6 +58,33 @@ def _zscore(values, group):
     return z.where((sd > 0) & (cnt >= 2), 0.0).fillna(0.0)
 
 
+def notes(r):
+    """Короткие заметки на русском по сработавшим паттернам (только для сработавших),
+    с конкретными цифрами. r — namedtuple из df.itertuples()."""
+    from .roles import kzt  # lazy import: roles импортирует patterns, поэтому импорт здесь, а не на верху модуля
+
+    out = []  # редкие и сильные признаки — первыми, чтобы влезли в evidence (≤200 символов)
+
+    if getattr(r, "split_flag", False):
+        out.append(f"дробление: {getattr(r, 'split_days', 0)} дн. по {getattr(r, 'split_max_tx', 0)}+ "
+                   f"перевода одному получателю, 5–10 тыс ₸")
+
+    anomaly_z = getattr(r, "anomaly_z", 0.0)
+    if anomaly_z >= T["anomaly_z"]:
+        out.append(f"аномалия: {getattr(r, 'anomaly_what', '')} z={anomaly_z:.1f} для колена {getattr(r, 'depth', '?')}")
+
+    n_fast_chains = getattr(r, "n_fast_chains", 0)
+    if n_fast_chains > 0:
+        rep = getattr(r, "fast_chain_repeats", 0)
+        out.append(f"быстрый проброс ≤2 дн.: {n_fast_chains} маршр." + (f", {rep} повторных" if rep else ""))
+
+    n_cycles = getattr(r, "n_cycles", 0)
+    if n_cycles > 0:
+        out.append(f"возвратные потоки: {n_cycles} цикл. ≤6 шагов, {kzt(getattr(r, 'cycle_kzt', 0.0))}")
+
+    return out
+
+
 def compute(G, df, tx):
     """Добавляет 5 колонок-признаков паттернов + вспомогательные (helper-колонки для evidence)."""
     df = df.copy()

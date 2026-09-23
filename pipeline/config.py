@@ -36,7 +36,8 @@ THRESHOLDS = {
     # приоритет
     "role_weight": {"coordinator": 1.0, "consolidator": 0.9, "distributor": 0.8,
                     "transit": 0.6, "terminal": 0.5, "peripheral": 0.1},
-    "priority_weights": {"role": 0.35, "flow": 0.20, "seeds": 0.20, "pagerank": 0.15, "betweenness": 0.10},
+    "priority_weights": {"role": 0.35, "flow": 0.20, "seeds": 0.20, "pagerank": 0.15, "betweenness": 0.10,
+                        "patterns": 0.10},
 
     "louvain_seed": 42,
     "top_n": 30,
