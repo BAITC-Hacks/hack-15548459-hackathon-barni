@@ -59,16 +59,17 @@ class RoleRuleTests(unittest.TestCase):
                               or node.in_deg >= T["terminal_min_payers"]))
         return locals()
 
-    def test_two_real_examples_per_rule_where_available(self):
+    def test_real_examples_per_rule(self):
         counts = self.nodes.rule.value_counts()
         self.assertEqual(set(counts.index), set(RULE_TO_ROLE))
-        # The current export contains only one C2 bridge; inventing a second
-        # would make this evidence test misleading. All other rules need two.
-        self.assertEqual(int(counts["C2"]), 1, "Update C2 sampling if a second bridge appears")
+        # Test every real C2 bridge; the current export has one.
+        self.assertGreaterEqual(int(counts["C2"]), 1, "C2: no real bridge to check")
         for rule, expected_role in RULE_TO_ROLE.items():
-            needed = 1 if rule == "C2" else 2
-            self.assertGreaterEqual(int(counts[rule]), needed, f"{rule}: fewer than {needed} real nodes")
-            examples = self.nodes.loc[self.nodes.rule == rule].sort_values("gid").head(needed)
+            if rule == "C2":
+                examples = self.nodes.loc[self.nodes.rule == rule].sort_values("gid")
+            else:
+                self.assertGreaterEqual(int(counts[rule]), 2, f"{rule}: fewer than 2 real nodes")
+                examples = self.nodes.loc[self.nodes.rule == rule].sort_values("gid").head(2)
             for node in examples.itertuples(index=False):
                 with self.subTest(rule=rule, gid=node.gid):
                     self.assertEqual(node.role, expected_role)
