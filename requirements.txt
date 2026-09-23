@@ -1,0 +1,16 @@
+openai>=1.50
+python-dotenv
+pydantic>=2
+numpy
+pandas
+openpyxl
+pypdf
+python-docx
+requests
+beautifulsoup4
+ddgs
+matplotlib
+fastapi
+uvicorn[standard]
+python-multipart
+streamlit

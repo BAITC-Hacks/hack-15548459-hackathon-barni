@@ -1,0 +1,12 @@
+.env
+.harness/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+.idea/
+.vscode/
+workspace/*
+!workspace/.gitkeep
+.claude-flow/
