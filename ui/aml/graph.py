@@ -79,6 +79,8 @@ def graph_html(nodes: pd.DataFrame, edges: pd.DataFrame, selected: str | None) -
         title = (f"gid: {gid}\n"
                  f"Роль: {theme.ROLE_LABELS.get(role, role)}\n"
                  f"Признаки: {getattr(row, 'evidence', '—')}")
+        # pyvis включает HTML-режим подсказок, если в любом title встретится "href" — не допускаем
+        title = title.replace("href", "h\u200bref")
         show_label = is_selected or gid in top15_ids or priority >= threshold
         size = 12 + 28 * max(0.0, priority)
         if is_selected:

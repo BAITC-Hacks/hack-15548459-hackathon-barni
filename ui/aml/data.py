@@ -116,6 +116,8 @@ def format_clusters_table(clusters: pd.DataFrame) -> pd.DataFrame:
 def money(value: object) -> str:
     try:
         amount = float(value)
+        if amount != amount:  # NaN
+            return "—"
         if abs(amount) >= 1_000_000:
             return f"{amount / 1_000_000:.1f}".replace(".", ",") + " млн ₸"
         if abs(amount) >= 1_000:

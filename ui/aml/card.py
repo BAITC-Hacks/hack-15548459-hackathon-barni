@@ -38,6 +38,8 @@ def _make_navigate(table: pd.DataFrame, key: str):
             idx = rows[0]
             if 0 <= idx < len(table):
                 st.session_state["gid_search"] = str(table.iloc[idx]["gid"])
+                # переход виден сразу: и из «Сети», и из «Топа» открываем узел во вкладке «Сеть»
+                st.session_state["main_tab"] = "🕸️ Сеть"
     return _navigate
 
 
