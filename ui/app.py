@@ -87,9 +87,6 @@ def select_top_row(key: str = "top_table") -> None:
 
 
 with st.sidebar:
-    logo_path = ROOT / "docs" / "assets" / "logo.png"
-    if logo_path.exists():
-        st.image(str(logo_path), width=76)
     st.header("GraphAML")
     st.caption("Рабочая область анализа сети")
     st.text_input("Найти по GID", key="gid_search", placeholder="Например, 100000", on_change=go_network)
