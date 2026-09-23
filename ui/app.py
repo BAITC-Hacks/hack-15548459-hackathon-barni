@@ -196,12 +196,14 @@ st.markdown(legend + " &nbsp; ◇ seed", unsafe_allow_html=True)
 tab_network, tab_top, tab_clusters, tab_ai = st.tabs(["Сеть", "Топ приоритетов", "Кластеры", "AI-ассистент"])
 
 with tab_network:
-    cols = st.columns(4)
+    cols = st.columns(5)
     cols[0].metric("Узлов", f"{len(nodes):,}".replace(",", " "))
     cols[1].metric("Seed", int(nodes["is_seed"].map(bool_value).sum()))
     cols[2].metric("Оборот", money(edges["sum_kzt"].sum()))
     role_counts = nodes["role"].value_counts()
-    cols[3].metric("Роли", " · ".join(f"{ROLE_LABELS.get(k, k)}: {v}" for k, v in role_counts.items()))
+    key_roles = {"coordinator", "consolidator", "distributor"}
+    cols[3].metric("Ключевых узлов", int(nodes["role"].isin(key_roles).sum()))
+    cols[4].metric("Координаторов", int(role_counts.get("coordinator", 0)))
     selected = st.session_state.gid_search.strip() or None
     if selected and selected not in set(nodes["gid"]):
         st.warning(f"GID {selected} не найден. Проверьте число без пробелов.")
