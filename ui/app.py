@@ -54,7 +54,12 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]
 
 def money(value: object) -> str:
     try:
-        return f"{float(value):,.0f} ₸".replace(",", " ")
+        amount = float(value)
+        if abs(amount) >= 1_000_000:
+            return f"{amount / 1_000_000:.1f}".replace(".", ",") + " млн ₸"
+        if abs(amount) >= 1_000:
+            return f"{amount / 1_000:.0f}".replace(".", ",") + " тыс ₸"
+        return f"{amount:,.0f} ₸".replace(",", " ")
     except (TypeError, ValueError):
         return "—"
 
